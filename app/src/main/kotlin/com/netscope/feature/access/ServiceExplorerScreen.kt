@@ -139,6 +139,11 @@ fun ServiceExplorerScreen(
                                                 endpoint.protocol.label + " · port " + endpoint.port,
                                                 style = MaterialTheme.typography.titleSmall,
                                             )
+                                            Text(
+                                                "Protocol: INFERRED FROM WELL-KNOWN PORT",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
                                             endpoint.uri?.let {
                                                 Text(
                                                     it,
