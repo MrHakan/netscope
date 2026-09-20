@@ -36,6 +36,7 @@ import java.util.Locale
 fun DeviceDetailScreen(
     deviceKey: String,
     onBack: () -> Unit,
+    onExploreServices: (String) -> Unit,
     viewModel: DeviceDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -151,6 +152,29 @@ fun DeviceDetailScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            item {
+                SectionCard(
+                    title = "Connect / browse services",
+                    subtitle = "Discover FTP, SFTP, SMB, web, remote desktop and other access endpoints",
+                ) {
+                    Column {
+                        Text(
+                            "NetScope can scan this host for common access services and open them " +
+                                "with a compatible Android app. Plain FTP can also be browsed inside NetScope.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Button(
+                            onClick = {
+                                device.ipv4?.toCanonicalString()?.let(onExploreServices)
+                            },
+                            enabled = device.ipv4 != null,
+                            modifier = Modifier.padding(top = 8.dp),
+                        ) { Text("Explore services") }
                     }
                 }
             }

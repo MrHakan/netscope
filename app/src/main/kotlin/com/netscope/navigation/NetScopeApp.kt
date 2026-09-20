@@ -1,5 +1,6 @@
 package com.netscope.navigation
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +27,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.netscope.feature.access.FtpBrowserScreen
+import com.netscope.feature.access.ServiceExplorerScreen
 import com.netscope.feature.dashboard.DashboardScreen
 import com.netscope.feature.devices.DeviceDetailScreen
 import com.netscope.feature.devices.DevicesScreen
@@ -50,8 +53,12 @@ object Routes {
     const val SUBNETS = "subnets"
     const val HISTORY = "history"
     const val SETTINGS = "settings"
+    const val SERVICES = "services?target={target}"
+    const val FTP_BROWSER = "ftp?host={host}&port={port}"
 
     fun deviceDetail(deviceKey: String) = "device/$deviceKey"
+    fun serviceExplorer(target: String) = "services?target=" + Uri.encode(target)
+    fun ftpBrowser(host: String, port: Int) = "ftp?host=" + Uri.encode(host) + "&port=" + port
 }
 
 private data class BottomDestination(
@@ -128,6 +135,7 @@ fun NetScopeApp(navController: NavHostController = rememberNavController()) {
                     DeviceDetailScreen(
                         deviceKey = entry.arguments?.getString("deviceKey").orEmpty(),
                         onBack = { navController.popBackStack() },
+                        onExploreServices = { host -> navController.navigate(Routes.serviceExplorer(host)) },
                     )
                 }
                 composable(Routes.WIFI) { WifiScreen() }
@@ -141,9 +149,23 @@ fun NetScopeApp(navController: NavHostController = rememberNavController()) {
                     )
                 }
                 composable(Routes.NETWORKS) { NetworksScreen(onBack = { navController.popBackStack() }) }
-                composable(Routes.SUBNETS) { SubnetsScreen(onBack = { navController.popBackStack() }) }
+                composable(Routes.SUBNETS) {
+                    SubnetsScreen(
+                        onBack = { navController.popBackStack() },
+                        onExploreServices = { target -> navController.navigate(Routes.serviceExplorer(target)) },
+                    )
+                }
                 composable(Routes.HISTORY) { HistoryScreen(onBack = { navController.popBackStack() }) }
                 composable(Routes.SETTINGS) { SettingsScreen(onBack = { navController.popBackStack() }) }
+                composable(Routes.SERVICES) {
+                    ServiceExplorerScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenFtp = { host, port -> navController.navigate(Routes.ftpBrowser(host, port)) },
+                    )
+                }
+                composable(Routes.FTP_BROWSER) {
+                    FtpBrowserScreen(onBack = { navController.popBackStack() })
+                }
             }
         }
     }
