@@ -35,6 +35,7 @@ import com.netscope.feature.common.NetScopeScreen
 @Composable
 fun SubnetsScreen(
     onBack: () -> Unit,
+    onExploreServices: (String) -> Unit,
     viewModel: SubnetsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -151,6 +152,10 @@ fun SubnetsScreen(
                                 )
                             } else {
                                 Button(onClick = viewModel::testHost) { Text("Try to connect") }
+                                OutlinedButton(
+                                    onClick = { onExploreServices(state.hostToTest.trim()) },
+                                    enabled = state.hostToTest.isNotBlank(),
+                                ) { Text("Explore this host") }
                                 if (state.report?.observations?.respondingHosts?.isNotEmpty() == true) {
                                     OutlinedButton(onClick = viewModel::useRespondingHost) {
                                         Text("Use a host that answered")
@@ -219,10 +224,16 @@ fun SubnetsScreen(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Button(
-                            onClick = viewModel::scanTargetSubnet,
+                        Row(
                             modifier = Modifier.padding(top = 8.dp),
-                        ) { Text("Scan this subnet") }
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Button(onClick = viewModel::scanTargetSubnet) { Text("Scan this subnet") }
+                            OutlinedButton(
+                                onClick = { onExploreServices(state.targetText.trim()) },
+                                enabled = state.targetText.isNotBlank(),
+                            ) { Text("Explore services") }
+                        }
                         state.scanStartedFor?.let { target ->
                             NoticeBanner(
                                 text = "Scanning $target. Open the Devices tab to watch results " +
