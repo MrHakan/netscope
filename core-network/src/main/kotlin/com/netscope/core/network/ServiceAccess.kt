@@ -42,6 +42,29 @@ enum class AccessProtocol(
     RDP("RDP", "rdp", 3389),
     VNC("VNC", "vnc", 5900),
     RAW_PRINT("Raw printer", null, 9100),
+    SMTP("SMTP", null, 25),
+    DNS("DNS (TCP)", null, 53),
+    POP3("POP3", null, 110),
+    RPCBIND("rpcbind", null, 111),
+    MS_RPC("MS RPC", null, 135),
+    IMAP("IMAP", null, 143),
+    SNMP_TCP("SNMP (TCP)", null, 161),
+    LDAP("LDAP", null, 389),
+    SMTPS("SMTPS", null, 465),
+    SYSLOG("Syslog", null, 514),
+    SMTP_SUBMISSION("SMTP submission", null, 587),
+    IMAPS("IMAPS", null, 993),
+    POP3S("POP3S", null, 995),
+    MS_SQL("Microsoft SQL Server", null, 1433),
+    PPTP("PPTP", null, 1723),
+    MQTT("MQTT", null, 1883),
+    MYSQL("MySQL", null, 3306),
+    SIP("SIP", null, 5060),
+    POSTGRESQL("PostgreSQL", null, 5432),
+    REDIS("Redis", null, 6379),
+    TR069("TR-069", null, 7547),
+    MQTT_TLS("MQTT over TLS", null, 8883),
+    MONGODB("MongoDB", null, 27017),
 }
 
 /** One open service endpoint found by the service explorer. */
@@ -59,25 +82,50 @@ data class ServiceEndpoint(
 object ServiceCatalog {
 
     val scanPorts: List<Int> = listOf(
-        21, 22, 23, 80, 139, 443, 445, 548, 554, 631, 990, 2049, 3389,
-        5000, 5900, 5901, 8000, 8008, 8080, 8443, 9000, 9100,
+        21, 22, 23, 25, 53, 80, 110, 111, 135, 139, 143, 161, 389, 443, 445, 465,
+        514, 548, 554, 587, 631, 990, 993, 995, 1433, 1723, 1883, 2049, 3306, 3389,
+        5000, 5060, 5432, 5900, 5901, 6379, 7547, 8000, 8008, 8080, 8443, 8883,
+        9000, 9100, 27017,
     )
 
     fun protocolsForPort(port: Int): List<AccessProtocol> = when (port) {
         21 -> listOf(AccessProtocol.FTP)
         22 -> listOf(AccessProtocol.SSH, AccessProtocol.SFTP)
         23 -> listOf(AccessProtocol.TELNET)
+        25 -> listOf(AccessProtocol.SMTP)
+        53 -> listOf(AccessProtocol.DNS)
         80, 5000, 8000, 8008, 8080, 9000 -> listOf(AccessProtocol.HTTP)
+        110 -> listOf(AccessProtocol.POP3)
+        111 -> listOf(AccessProtocol.RPCBIND)
+        135 -> listOf(AccessProtocol.MS_RPC)
+        143 -> listOf(AccessProtocol.IMAP)
+        161 -> listOf(AccessProtocol.SNMP_TCP)
+        389 -> listOf(AccessProtocol.LDAP)
         443, 8443 -> listOf(AccessProtocol.HTTPS)
         139, 445 -> listOf(AccessProtocol.SMB)
+        465 -> listOf(AccessProtocol.SMTPS)
+        514 -> listOf(AccessProtocol.SYSLOG)
         548 -> listOf(AccessProtocol.AFP)
         554 -> listOf(AccessProtocol.RTSP)
+        587 -> listOf(AccessProtocol.SMTP_SUBMISSION)
         631 -> listOf(AccessProtocol.IPP)
         990 -> listOf(AccessProtocol.FTPS)
+        993 -> listOf(AccessProtocol.IMAPS)
+        995 -> listOf(AccessProtocol.POP3S)
+        1433 -> listOf(AccessProtocol.MS_SQL)
+        1723 -> listOf(AccessProtocol.PPTP)
+        1883 -> listOf(AccessProtocol.MQTT)
         2049 -> listOf(AccessProtocol.NFS)
+        3306 -> listOf(AccessProtocol.MYSQL)
         3389 -> listOf(AccessProtocol.RDP)
+        5060 -> listOf(AccessProtocol.SIP)
+        5432 -> listOf(AccessProtocol.POSTGRESQL)
         5900, 5901 -> listOf(AccessProtocol.VNC)
+        6379 -> listOf(AccessProtocol.REDIS)
+        7547 -> listOf(AccessProtocol.TR069)
+        8883 -> listOf(AccessProtocol.MQTT_TLS)
         9100 -> listOf(AccessProtocol.RAW_PRINT)
+        27017 -> listOf(AccessProtocol.MONGODB)
         else -> emptyList()
     }
 
@@ -119,13 +167,16 @@ class ServiceAccessScanner @Inject constructor(
             val result = hostProber.scanPort(host, port, timeoutMillis)
             completed++
             if (result.state == PortState.OPEN) {
+                val banner = runCatching {
+                    hostProber.grabBanner(host, port, BANNER_TIMEOUT_MILLIS)
+                }.getOrNull()
                 val endpoints = ServiceCatalog.protocolsForPort(port).map { protocol ->
                     ServiceEndpoint(
                         host = address.toCanonicalString(),
                         port = port,
                         protocol = protocol,
                         latencyMillis = result.latencyMillis,
-                        banner = result.banner,
+                        banner = banner,
                     )
                 }
                 found += endpoints
@@ -173,13 +224,16 @@ class ServiceAccessScanner @Inject constructor(
                     val inet = InetAddress.getByAddress(task.address.bytes)
                     val result = hostProber.scanPort(inet, task.port, timeoutMillis)
                     if (result.state == PortState.OPEN) {
+                        val banner = runCatching {
+                            hostProber.grabBanner(inet, task.port, BANNER_TIMEOUT_MILLIS)
+                        }.getOrNull()
                         val endpoints = ServiceCatalog.protocolsForPort(task.port).map { protocol ->
                             ServiceEndpoint(
                                 host = task.address.toCanonicalString(),
                                 port = task.port,
                                 protocol = protocol,
                                 latencyMillis = result.latencyMillis,
-                                banner = result.banner,
+                                banner = banner,
                             )
                         }
                         endpoints.forEach {
@@ -206,6 +260,7 @@ class ServiceAccessScanner @Inject constructor(
 
     companion object {
         private const val DEFAULT_TIMEOUT_MILLIS = 450L
+        private const val BANNER_TIMEOUT_MILLIS = 700L
         private const val DEFAULT_WORKERS = 48
         private const val MAX_WORKERS = 64
         private const val MAX_SUBNET_HOSTS = 4096L
