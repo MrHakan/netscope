@@ -2,7 +2,15 @@ package com.netscope.core.network
 
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.LocationManager
+import android.net.wifi.WifiManager
 import android.os.Build
+import com.netscope.core.model.ApiLevel
+import com.netscope.core.model.CapabilityArea
+import com.netscope.core.model.CapabilityVerdict
+import com.netscope.core.model.NetScopePermissions
+import com.netscope.core.model.PermissionPolicy
+import com.netscope.core.model.PlatformState
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -18,11 +26,11 @@ data class PermissionRequirement(
 )
 
 /**
- * Works out which permissions this Android version actually requires.
+ * The Android adapter for [PermissionPolicy].
  *
- * Permission names and behaviour change with almost every release, so nothing here is
- * assumed: the platform is asked whether it defines a permission before the app tries
- * to use it, and an undefined permission is simply skipped.
+ * Its only job is to observe the platform and hand a [PlatformState] to the policy. All
+ * the release-specific rules live in core-model, where they are unit-tested for every
+ * API level — including ones this build's compile SDK predates.
  */
 @Singleton
 class PermissionInspector @Inject constructor(
@@ -30,18 +38,39 @@ class PermissionInspector @Inject constructor(
 ) {
 
     /**
-     * Candidate names for the local-network access permission introduced on recent
-     * releases.
+     * Reads the current platform state.
      *
-     * The app is built against an SDK that may predate it, so the constant cannot be
-     * referenced directly. Each candidate is checked against the running platform and
-     * only a name the platform actually defines is ever used; if none is defined, local
-     * network access needs no permission on this device.
+     * Permission names that may not exist on this release are probed by asking the
+     * package manager whether it defines them, rather than by referencing a constant
+     * the compile SDK may not have.
      */
-    private val localNetworkPermissionCandidates = listOf(
-        "android.permission.LOCAL_NETWORK_ACCESS",
-        "android.permission.NEARBY_DEVICES_LOCAL_NETWORK",
-    )
+    fun platformState(): PlatformState {
+        val candidates = buildSet {
+            addAll(NetScopePermissions.LOCAL_NETWORK_CANDIDATES)
+            add(NetScopePermissions.NEARBY_WIFI_DEVICES)
+            add(NetScopePermissions.ACCESS_FINE_LOCATION)
+            add(NetScopePermissions.POST_NOTIFICATIONS)
+        }
+        val declared = declaredPermissions()
+        return PlatformState(
+            sdkInt = Build.VERSION.SDK_INT,
+            targetSdkInt = context.applicationInfo.targetSdkVersion,
+            grantedPermissions = candidates.filterTo(mutableSetOf(), ::isGranted),
+            platformDefinedPermissions = candidates.filterTo(mutableSetOf(), ::isDefinedByPlatform),
+            declaredPermissions = declared,
+            locationServicesEnabled = locationServicesEnabled(),
+            wifiEnabled = wifiEnabled(),
+        )
+    }
+
+    fun verdict(area: CapabilityArea): CapabilityVerdict =
+        PermissionPolicy.verdict(area, platformState())
+
+    fun canReadWifiInfo(): Boolean = PermissionPolicy.canReadWifiInfo(platformState())
+    fun canScanAccessPoints(): Boolean = PermissionPolicy.canScanAccessPoints(platformState())
+    fun canScanLan(): Boolean = PermissionPolicy.canScanLan(platformState())
+    fun canUseMdns(): Boolean = PermissionPolicy.canUseMdns(platformState())
+    fun canUseSsdp(): Boolean = PermissionPolicy.canUseSsdp(platformState())
 
     fun isGranted(permission: String): Boolean =
         context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
@@ -52,23 +81,37 @@ class PermissionInspector @Inject constructor(
         true
     }.getOrDefault(false)
 
-    /** Whether this app declared [permission] in its manifest. */
-    fun isDeclaredByApp(permission: String): Boolean = runCatching {
-        val info = context.packageManager.getPackageInfo(
-            context.packageName,
-            PackageManager.GET_PERMISSIONS,
-        )
-        info.requestedPermissions?.contains(permission) == true
-    }.getOrDefault(false)
+    private fun declaredPermissions(): Set<String> = runCatching {
+        context.packageManager
+            .getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
+            .requestedPermissions
+            ?.toSet()
+            .orEmpty()
+    }.getOrDefault(emptySet())
 
     /**
-     * The local-network permission name this device uses, or null if it has none.
-     *
-     * Returning null means local network access is not gated by a runtime permission
-     * here — not that the permission was denied.
+     * Location services must be on system-wide before some releases return Wi-Fi scan
+     * results, even with the permission granted.
      */
+    private fun locationServicesEnabled(): Boolean {
+        val manager = context.getSystemService(LocationManager::class.java) ?: return false
+        return if (Build.VERSION.SDK_INT >= ApiLevel.LOCATION_ENABLED_API) {
+            runCatching { manager.isLocationEnabled }.getOrDefault(false)
+        } else {
+            runCatching {
+                manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
+                    manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+            }.getOrDefault(false)
+        }
+    }
+
+    private fun wifiEnabled(): Boolean = runCatching {
+        context.applicationContext.getSystemService(WifiManager::class.java)?.isWifiEnabled == true
+    }.getOrDefault(false)
+
+    /** The local network permission name this platform uses, or null if it has none. */
     fun localNetworkPermission(): String? =
-        localNetworkPermissionCandidates.firstOrNull { isDefinedByPlatform(it) }
+        PermissionPolicy.localNetworkPermissionFor(platformState())
 
     /**
      * True when the platform gates local network access and the user has not granted it.
@@ -76,65 +119,60 @@ class PermissionInspector @Inject constructor(
      * The scan screen uses this to show PERMISSION REQUIRED instead of an empty result,
      * which would look identical to a network with nothing on it.
      */
-    fun localNetworkAccessBlocked(): Boolean {
-        val permission = localNetworkPermission() ?: return false
-        if (!isDeclaredByApp(permission)) return false
-        return !isGranted(permission)
-    }
+    fun localNetworkAccessBlocked(): Boolean = !canScanLan()
 
     /** Everything the app may ask for, in the order the UI should present it. */
-    fun requirements(): List<PermissionRequirement> = buildList {
-        val wifiPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            android.Manifest.permission.NEARBY_WIFI_DEVICES
-        } else {
-            android.Manifest.permission.ACCESS_FINE_LOCATION
-        }
-        add(
-            PermissionRequirement(
-                permission = wifiPermission,
-                title = "Wi-Fi scanning",
-                rationale = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    "Android 13 and newer require the nearby Wi-Fi devices permission to list " +
-                        "access points and to read the SSID of the connected network. NetScope " +
-                        "declares it with neverForLocation: it does not derive your location."
-                } else {
-                    "Below Android 13 the platform gates Wi-Fi scan results and the connected " +
-                        "SSID behind the location permission. NetScope does not use your location " +
-                        "for anything else."
-                },
-                isGranted = isGranted(wifiPermission),
-                isDefinedByPlatform = isDefinedByPlatform(wifiPermission),
-                isOptional = true,
-            ),
-        )
-
-        localNetworkPermission()?.let { permission ->
+    fun requirements(): List<PermissionRequirement> {
+        val state = platformState()
+        return buildList {
+            val wifiPermission = PermissionPolicy.wifiPermissionFor(state)
+            val wifiVerdict = PermissionPolicy.verdict(CapabilityArea.ACCESS_POINT_SCAN, state)
             add(
                 PermissionRequirement(
-                    permission = permission,
-                    title = "Local network access",
-                    rationale = "This version of Android requires explicit permission before an " +
-                        "app may reach other devices on your local network. Without it, scans " +
-                        "return nothing at all rather than failing visibly.",
-                    isGranted = isGranted(permission),
-                    isDefinedByPlatform = true,
-                    isOptional = false,
-                ),
-            )
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(
-                PermissionRequirement(
-                    permission = android.Manifest.permission.POST_NOTIFICATIONS,
-                    title = "Notifications",
-                    rationale = "Only needed if you turn on alerts for newly discovered devices " +
-                        "or run the host monitor. Off by default.",
-                    isGranted = isGranted(android.Manifest.permission.POST_NOTIFICATIONS),
-                    isDefinedByPlatform = true,
+                    permission = wifiPermission,
+                    title = "Wi-Fi scanning",
+                    rationale = (wifiVerdict as? CapabilityVerdict.PermissionRequired)?.rationale
+                        ?: "Lists nearby access points and reads the connected network's SSID.",
+                    isGranted = wifiPermission in state.grantedPermissions,
+                    isDefinedByPlatform = wifiPermission in state.platformDefinedPermissions,
                     isOptional = true,
                 ),
             )
+
+            PermissionPolicy.localNetworkPermissionFor(state)?.let { permission ->
+                val verdict = PermissionPolicy.verdict(CapabilityArea.LAN_SCAN, state)
+                add(
+                    PermissionRequirement(
+                        permission = permission,
+                        title = "Local network access",
+                        rationale = (verdict as? CapabilityVerdict.PermissionRequired)?.rationale
+                            ?: "Required before this app may reach other devices on your network.",
+                        isGranted = permission in state.grantedPermissions,
+                        isDefinedByPlatform = true,
+                        // Scanning is the core of the app, but everything that does not
+                        // touch the LAN keeps working without it.
+                        isOptional = false,
+                    ),
+                )
+            }
+
+            val notificationVerdict = PermissionPolicy.verdict(CapabilityArea.NOTIFICATIONS, state)
+            if (notificationVerdict is CapabilityVerdict.PermissionRequired) {
+                add(
+                    PermissionRequirement(
+                        permission = NetScopePermissions.POST_NOTIFICATIONS,
+                        title = "Notifications",
+                        rationale = notificationVerdict.rationale,
+                        isGranted = false,
+                        isDefinedByPlatform = true,
+                        isOptional = true,
+                    ),
+                )
+            }
         }
     }
+
+    /** Features that keep working when local network access is denied. */
+    fun featuresUnaffectedByLocalNetworkDenial(): List<String> =
+        PermissionPolicy.featuresUnaffectedByLocalNetworkDenial()
 }

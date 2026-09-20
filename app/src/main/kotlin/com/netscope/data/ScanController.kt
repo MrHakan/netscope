@@ -1,6 +1,8 @@
 package com.netscope.data
 
 import com.netscope.core.database.HistoryRepository
+import com.netscope.core.model.CapabilityArea
+import com.netscope.core.model.CapabilityVerdict
 import com.netscope.core.model.DiscoveredDevice
 import com.netscope.core.model.Evidence
 import com.netscope.core.model.EvidenceSource
@@ -128,12 +130,17 @@ class ScanController @Inject constructor(
             return
         }
 
-        if (permissionInspector.localNetworkAccessBlocked()) {
+        val lanVerdict = permissionInspector.verdict(CapabilityArea.LAN_SCAN)
+        if (lanVerdict is CapabilityVerdict.PermissionRequired) {
+            // Scanning is off, but nothing else is: the rest of the app involves no
+            // local network traffic and stays available, so the message says so rather
+            // than implying NetScope is unusable.
+            val stillWorking = permissionInspector.featuresUnaffectedByLocalNetworkDenial()
             _state.value = _state.value.copy(
-                error = "This version of Android requires the local network access permission " +
-                    "before an app can reach other devices on your network. Grant it in Settings " +
-                    "and run the scan again. Without it a scan returns nothing, which would look " +
-                    "identical to an empty network.",
+                error = lanVerdict.rationale +
+                    "\n\nGrant " + lanVerdict.permissions.joinToString(", ") +
+                    " and run the scan again. These features do not need it and keep working: " +
+                    stillWorking.joinToString("; ") + ".",
                 progress = _state.value.progress.copy(isRunning = false),
             )
             return

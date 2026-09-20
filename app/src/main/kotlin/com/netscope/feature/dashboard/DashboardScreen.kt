@@ -25,10 +25,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.netscope.core.model.HealthStatus
 import com.netscope.core.model.NetworkSnapshot
+import com.netscope.core.model.NetworkTopology
+import com.netscope.core.model.SubnetRelation
 import com.netscope.core.model.SignalQuality
 import com.netscope.core.model.WifiConnectionInfo
 import com.netscope.core.ui.EvidenceRow
 import com.netscope.core.ui.LocalStatusColors
+import com.netscope.core.ui.MonoTextStyle
 import com.netscope.core.ui.NoticeBanner
 import com.netscope.core.ui.NoticeTone
 import com.netscope.core.ui.PlainRow
@@ -75,6 +78,10 @@ fun DashboardScreen(
             }
 
             item { ConnectionCard(state.network, state.wifi) }
+
+            if (state.topology.localCidr != null || state.topology.subnets.isNotEmpty()) {
+                item { TopologyCard(state.topology) }
+            }
 
             state.network?.let { network ->
                 item { AddressingCard(network) }
@@ -367,6 +374,114 @@ private fun ActionsCard(
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = onOpenNetworks, modifier = Modifier.weight(1f)) { Text("Routes") }
                 OutlinedButton(onClick = onOpenHistory, modifier = Modifier.weight(1f)) { Text("History") }
+            }
+        }
+    }
+}
+
+/**
+ * The logical picture: this device, its gateway, and the subnets reachable through it.
+ *
+ * Every branch comes from a route Android actually exposed. Layer 2 is not shown
+ * because it is not knowable from here, and a subnet with no recorded scan shows no
+ * device count rather than a zero.
+ */
+@Composable
+private fun TopologyCard(topology: NetworkTopology) {
+    val status = LocalStatusColors.current
+    SectionCard(
+        title = "Network topology",
+        subtitle = "Layer 3 only, derived from the routes Android exposes",
+    ) {
+        Column {
+            Text(
+                text = "YOU",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = topology.localCidr?.let {
+                    "${topology.localAddress?.toCanonicalString()}/${it.prefixLength}"
+                } ?: (topology.localAddress?.toCanonicalString() ?: "No IPv4 address"),
+                style = MonoTextStyle,
+            )
+            topology.interfaceName?.let { name ->
+                Text(
+                    text = name + (topology.transportLabel?.let { " · $it" } ?: ""),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (topology.defaultGateway != null) {
+                Text(
+                    text = "│",
+                    style = MonoTextStyle,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Text(
+                    text = "▼",
+                    style = MonoTextStyle,
+                    color = MaterialTheme.colorScheme.outline,
+                )
+                Text(
+                    text = topology.defaultGateway!!.toCanonicalString(),
+                    style = MonoTextStyle,
+                )
+                Text(
+                    text = "DEFAULT GATEWAY",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            if (topology.subnets.isEmpty()) {
+                Text(
+                    text = "Android exposed no subnet routes for this network.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+                return@SectionCard
+            }
+
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                topology.subnets.forEachIndexed { index, node ->
+                    val isLast = index == topology.subnets.lastIndex
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (isLast) "└──" else "├──",
+                            style = MonoTextStyle,
+                            color = MaterialTheme.colorScheme.outline,
+                        )
+                        Text(
+                            text = " ${node.cidr}",
+                            style = MonoTextStyle,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        val (background, foreground) = when (node.relation) {
+                            SubnetRelation.CONNECTED -> status.reachable to status.onReachable
+                            SubnetRelation.ROUTED -> status.informational to status.onInformational
+                            SubnetRelation.UNKNOWN -> status.unknown to status.onUnknown
+                        }
+                        StatusPill(node.relation.label.uppercase(), background, foreground)
+                    }
+                    Text(
+                        text = "      " + (
+                            node.deviceCount?.let { "$it device(s) in the last scan" }
+                                ?: "not scanned yet"
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        text = "      " + node.evidence,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 6.dp),
+                    )
+                }
             }
         }
     }

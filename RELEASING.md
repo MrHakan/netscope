@@ -71,6 +71,13 @@ $ANDROID_HOME/build-tools/35.0.0/aapt2 dump badging \
 
 The permission list should contain exactly `INTERNET`, `ACCESS_NETWORK_STATE`,
 `ACCESS_WIFI_STATE`, `CHANGE_WIFI_STATE`, `NEARBY_WIFI_DEVICES` (with
-`neverForLocation`), `ACCESS_FINE_LOCATION` (capped at API 32) and `POST_NOTIFICATIONS`.
-Anything else has been pulled in by a dependency's manifest merge and should be
-investigated rather than accepted.
+`neverForLocation`), `ACCESS_FINE_LOCATION` (capped at API 32), `ACCESS_LOCAL_NETWORK`
+and `POST_NOTIFICATIONS`. Anything else has been pulled in by a dependency's manifest
+merge and should be investigated rather than accepted — that is exactly how
+`WAKE_LOCK`, `RECEIVE_BOOT_COMPLETED` and `FOREGROUND_SERVICE` once appeared, via a
+WorkManager dependency for a feature the app did not yet have.
+
+`ACCESS_LOCAL_NETWORK` is inert on platforms that do not define it and is only enforced
+for apps targeting the level that introduced it. When `targetSdk` is raised to that
+level, re-test a denial path: LAN scanning must report `PERMISSION REQUIRED` and name
+the features that still work, and the rest of the app must stay usable.

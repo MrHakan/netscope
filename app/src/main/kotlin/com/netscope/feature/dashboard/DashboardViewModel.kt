@@ -7,6 +7,8 @@ import com.netscope.core.model.Evidence
 import com.netscope.core.model.EvidenceSource
 import com.netscope.core.model.HealthPanel
 import com.netscope.core.model.NetworkSnapshot
+import com.netscope.core.model.NetworkTopology
+import com.netscope.core.model.TopologyBuilder
 import com.netscope.core.model.Unavailability
 import com.netscope.core.model.WifiConnectionInfo
 import com.netscope.core.network.NetworkInspector
@@ -14,6 +16,7 @@ import com.netscope.core.network.PermissionInspector
 import com.netscope.core.network.PermissionRequirement
 import com.netscope.core.network.ReachabilityService
 import com.netscope.core.network.WifiInspector
+import com.netscope.data.ScanController
 import com.netscope.data.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +38,7 @@ data class DashboardUiState(
     val wifi: WifiConnectionInfo? = null,
     val health: HealthPanel? = null,
     val permissions: List<PermissionRequirement> = emptyList(),
+    val topology: NetworkTopology = NetworkTopology(null, null, null, null, null, emptyList()),
     val publicIp: Evidence<String> = Evidence.unavailable(Unavailability.NOT_ATTEMPTED),
     val publicIpLookupEnabled: Boolean = false,
     val demoMode: Boolean = false,
@@ -48,6 +52,7 @@ class DashboardViewModel @Inject constructor(
     private val reachabilityService: ReachabilityService,
     private val permissionInspector: PermissionInspector,
     private val settingsRepository: SettingsRepository,
+    private val scanController: ScanController,
 ) : ViewModel() {
 
     private val manualRefresh = MutableStateFlow(0)
@@ -56,6 +61,23 @@ class DashboardViewModel @Inject constructor(
         Evidence.unavailable(Unavailability.NOT_ATTEMPTED),
     )
     private val loadingHealth = MutableStateFlow(false)
+
+    /**
+     * Device counts per subnet from the most recent scan.
+     *
+     * A subnet that has not been scanned is absent from this map, so the topology shows
+     * no count for it rather than implying it is empty.
+     */
+    private val scanDeviceCounts: StateFlow<Map<String, Int>> = scanController.state
+        .map { scan ->
+            val target = scan.progress.target
+            if (target.isEmpty() || scan.devices.isEmpty()) {
+                emptyMap()
+            } else {
+                mapOf(target to scan.devices.size)
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private val networks: StateFlow<List<NetworkSnapshot>> =
         networkInspector.observeNetworks()
@@ -68,8 +90,10 @@ class DashboardViewModel @Inject constructor(
         publicIp,
         combine(manualRefresh, loadingHealth) { refresh, loading -> refresh to loading },
     ) { networkList, settings, healthPanel, ip, (_, loading) ->
+        val active = networkList.firstOrNull { it.isDefaultNetwork } ?: networkList.firstOrNull()
         DashboardUiState(
-            network = networkList.firstOrNull { it.isDefaultNetwork } ?: networkList.firstOrNull(),
+            network = active,
+            topology = TopologyBuilder.build(active, deviceCounts = scanDeviceCounts.value),
             wifi = runCatching { wifiInspector.connectionInfo() }.getOrNull(),
             health = healthPanel,
             permissions = permissionInspector.requirements(),

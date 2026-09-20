@@ -32,6 +32,19 @@
         android:name="android.permission.ACCESS_FINE_LOCATION"
         android:maxSdkVersion="32" />
 
+    <!--
+      Local network access. Newer releases require an explicit grant before an app may
+      reach other devices on the LAN, which covers TCP and ICMP probing as well as mDNS
+      and SSDP discovery.
+
+      It is declared by name rather than through a constant because this build compiles
+      against an older SDK. Declaring a permission the running platform does not define
+      is inert, and the permission is only enforced for apps targeting the level that
+      introduced it, so this is safe on every release NetScope supports. The app asks the
+      platform at runtime which name it actually defines - see PermissionPolicy.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+
     <!-- Optional: new-device alerts and the host monitor. Off by default. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 

@@ -53,8 +53,46 @@ surfaces each of them in the UI instead of hiding them.
 | **Routing table** | `/proc/net/route` is not readable. `LinkProperties.getRoutes()` returns only the routes attached to each `Network` object — a subset of the kernel table. | Uses `LinkProperties` as the authoritative source, labels every row with its origin, and states in the UI that a destination missing from the table may still be routed by the default gateway. |
 | **Wi-Fi scan throttling** | Foreground apps get roughly four `startScan()` calls per two minutes since API 28. | Never polls. Registers for the scan-results broadcast, serves cached results, shows the **age** of every result, and predicts when the next scan is permitted. |
 | **Location services** | On many releases scan results are empty unless location services are on system-wide, even with the permission granted. | Detected and reported as `LOCATION SERVICES REQUIRED` with a settings deep-link — never as "no networks found". |
-| **Local network permission** | Newer releases gate local network access behind a runtime permission whose name may postdate the compile SDK. | Asks the platform whether it defines the permission before using it, rather than hardcoding a guessed constant. If it is required and missing, scans report `PERMISSION REQUIRED` instead of returning silently empty. |
+| **Local network permission** | Newer releases gate local network access behind `ACCESS_LOCAL_NETWORK`, enforced for apps targeting the level that introduced it. TCP, UDP, mDNS and SSDP all fall under it. | Declared in the manifest and resolved **by name at runtime**, because this build compiles against an older SDK. When it is required and missing, LAN scanning reports `PERMISSION REQUIRED` and names the features that keep working; it never returns silently empty. |
 | **Native binaries** | Executing a binary from app data storage is blocked (W^X). | No bundled binaries. See "Not implemented". |
+
+### One place for the permission rules
+
+Release-specific `if (SDK_INT >= ...)` checks scattered through view models are
+untestable and easy to get subtly wrong, so every permission rule lives in a single pure
+object, `PermissionPolicy` in `core-model`:
+
+```kotlin
+PermissionPolicy.canReadWifiInfo(state)
+PermissionPolicy.canScanAccessPoints(state)
+PermissionPolicy.canScanLan(state)
+PermissionPolicy.canUseMdns(state)
+PermissionPolicy.canUseSsdp(state)
+```
+
+The capabilities are separate because Android gates them separately — reading the
+connected network, listing access points and reaching other hosts each have their own
+rules, and collapsing them into one boolean is what produces an app that shows an empty
+list with no explanation. `PermissionInspector` is a thin Android adapter that observes
+the platform into a `PlatformState`; the rules themselves never touch the framework and
+are unit-tested for API 26 through 37, including levels this compile SDK predates.
+
+**Graceful degradation.** Denying local network access disables LAN discovery and
+nothing else. The subnet calculator, interface and route information, DNS lookups, the
+Wi-Fi analyzer and the public IP lookup involve no local network traffic and remain
+available; the error message says so explicitly.
+
+### Host monitoring intervals
+
+`MonitorSchedulingPolicy` encodes what Android actually permits rather than passing a
+user-chosen interval to WorkManager and hoping:
+
+| Requested interval | Mechanism |
+|---|---|
+| 15 minutes or longer | WorkManager periodic work — deferred and **inexact**; the UI says "about every N minutes" |
+| Under 15 minutes | A foreground monitoring session the user starts while the app is visible, with a persistent notification |
+| Under 15 minutes, started from the background on Android 12+ | Rejected with an explanation — a foreground service cannot be started from the background there |
+| Under 5 seconds | Rejected — no extra information, significant battery cost |
 
 ---
 
@@ -71,9 +109,10 @@ app               feature packages: dashboard, devices, wifi, tools, subnets,
                   networks, history, settings
 ```
 
-`core-model` is a **pure JVM module** with no Android dependencies, so all subnet, CIDR
-and reasoning logic is unit-testable without Robolectric, an emulator or a LAN. That is
-where the 79 unit tests live.
+`core-model` is a **pure JVM module** with no Android dependencies, so all subnet, CIDR,
+permission and reasoning logic is unit-testable without Robolectric, an emulator or a
+LAN. That is where the 114 unit tests live — including the permission matrix for every
+API level from 26 to 37 and the topology derivation.
 
 **Deviation from the specification:** the spec lists eleven separate `feature-*` Gradle
 modules. They are implemented as packages inside `app` instead. The four `core-*`
@@ -83,6 +122,16 @@ Hilt/Compose configuration without changing the architecture, and the spec itsel
 for "Clean Architecture principles, not ceremony".
 
 ---
+
+## Topology
+
+The dashboard shows the logical picture — this device, its default gateway, and each
+subnet Android exposes a route to, marked `CONNECTED` or `ROUTED` with the route that
+proves it. The default route is deliberately excluded: it covers every destination, so
+drawing it as a branch would suggest the whole internet is a neighbouring subnet.
+
+Layer 2 is not shown, because it is not knowable from Layer 3 scanning. A subnet with no
+recorded scan shows "not scanned yet" rather than a zero.
 
 ## The scan engine
 
@@ -181,8 +230,9 @@ Stated plainly rather than stubbed:
 - **Root and managed-device modes** — detected and reported as capability levels, but no
   elevated operations are implemented. Nothing in the app requires root.
 - **Router/controller integrations** (UniFi, OpenWrt, MikroTik, SNMP) — M3.
-- **Export to JSON/CSV, topology view, WorkManager host monitor, new-device
-  notifications** — M2. The notification preference exists but currently gates nothing,
+- **Export to JSON/CSV, WorkManager host monitor, new-device notifications** — M2. The
+  scheduling rules for the host monitor are implemented and tested in
+  `MonitorSchedulingPolicy`; the monitor itself is not built yet. The notification preference exists but currently gates nothing,
   and the WorkManager dependency was removed so the app does not request `WAKE_LOCK`,
   `RECEIVE_BOOT_COMPLETED` or `FOREGROUND_SERVICE` for a feature it does not have.
 - **Device labels** persist in the schema but the detail screen's save button is not yet

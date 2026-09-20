@@ -6,15 +6,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
-import android.location.LocationManager
 import android.net.wifi.ScanResult
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.SystemClock
+import com.netscope.core.model.CapabilityArea
+import com.netscope.core.model.CapabilityVerdict
 import com.netscope.core.model.Confidence
 import com.netscope.core.model.Evidence
 import com.netscope.core.model.EvidenceSource
 import com.netscope.core.model.MacAddress
+import com.netscope.core.model.PermissionPolicy
 import com.netscope.core.model.Unavailability
 import com.netscope.core.model.WifiConnectionInfo
 import com.netscope.core.model.WifiScanAvailability
@@ -36,13 +38,11 @@ import javax.inject.Singleton
 @Singleton
 class WifiInspector @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val permissionInspector: PermissionInspector,
 ) {
 
     private val wifiManager: WifiManager?
         get() = context.applicationContext.getSystemService(WifiManager::class.java)
-
-    private val locationManager: LocationManager?
-        get() = context.getSystemService(LocationManager::class.java)
 
     /** Timestamps of our own startScan() calls, used to predict the next allowed one. */
     private val recentScanRequests = ArrayDeque<Long>()
@@ -50,49 +50,34 @@ class WifiInspector @Inject constructor(
     /**
      * The permissions this Android version actually requires for scan results.
      *
-     * NEARBY_WIFI_DEVICES replaced the location permission at API 33; below that, the
-     * location permission is still the gate.
+     * The rule lives in [PermissionPolicy] so it is unit-tested across every API level
+     * rather than restated here.
      */
     fun requiredScanPermissions(): List<String> =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            listOf(Manifest.permission.NEARBY_WIFI_DEVICES)
-        } else {
-            listOf(Manifest.permission.ACCESS_FINE_LOCATION)
-        }
+        listOf(PermissionPolicy.wifiPermissionFor(permissionInspector.platformState()))
 
-    private fun hasPermission(permission: String): Boolean =
-        context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+    private fun hasPermission(permission: String): Boolean = permissionInspector.isGranted(permission)
 
     /**
-     * Location services must be enabled system-wide on many releases before scan
-     * results are returned, even when the permission is granted. Reporting "no networks
-     * found" in that situation would be plainly wrong.
+     * Why a scan would or would not produce results right now.
+     *
+     * Permission, location-services and Wi-Fi-state rules come from the shared policy;
+     * only throttling is decided here, because it depends on this class's own call
+     * history rather than on platform state.
      */
-    private fun locationServicesEnabled(): Boolean {
-        val manager = locationManager ?: return false
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            runCatching { manager.isLocationEnabled }.getOrDefault(false)
-        } else {
-            runCatching {
-                manager.isProviderEnabled(LocationManager.GPS_PROVIDER) ||
-                    manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
-            }.getOrDefault(false)
-        }
-    }
-
-    /** Why a scan would or would not produce results right now. */
     fun scanAvailability(): WifiScanAvailability {
-        val manager = wifiManager ?: return WifiScanAvailability.WifiDisabled
-        val missing = requiredScanPermissions().filterNot(::hasPermission)
-        if (missing.isNotEmpty()) return WifiScanAvailability.PermissionRequired(missing)
-        if (!manager.isWifiEnabled) return WifiScanAvailability.WifiDisabled
-        // Location services only gate results below API 33, where the location
-        // permission is what grants them.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && !locationServicesEnabled()) {
-            return WifiScanAvailability.LocationServicesDisabled
+        return when (val verdict = permissionInspector.verdict(CapabilityArea.ACCESS_POINT_SCAN)) {
+            is CapabilityVerdict.PermissionRequired ->
+                WifiScanAvailability.PermissionRequired(verdict.permissions)
+            CapabilityVerdict.LocationServicesRequired ->
+                WifiScanAvailability.LocationServicesDisabled
+            CapabilityVerdict.WifiDisabled -> WifiScanAvailability.WifiDisabled
+            is CapabilityVerdict.Unsupported -> WifiScanAvailability.WifiDisabled
+            CapabilityVerdict.Allowed ->
+                throttleRetryDelayMillis()
+                    ?.let { WifiScanAvailability.Throttled(it) }
+                    ?: WifiScanAvailability.Available
         }
-        throttleRetryDelayMillis()?.let { return WifiScanAvailability.Throttled(it) }
-        return WifiScanAvailability.Available
     }
 
     /**
