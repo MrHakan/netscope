@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!--
+      Scan history stays on the device. Backing up an inventory of someone's home or
+      office network to cloud storage is exactly what the privacy model rules out.
+    -->
+    <exclude domain="database" path="netscope.db" />
+    <exclude domain="sharedpref" path="." />
+</full-backup-content>
