@@ -135,6 +135,27 @@ Two things go further:
 - **Scan this subnet** hands the target to the same discovery engine the Devices screen
   uses, so a routed subnet can be enumerated once it is shown to be reachable.
 
+## Service Explorer
+
+Subnet analysis now leads directly into access. From the Subnet Analyzer, enter a routed
+target such as `10.0.7.0/24` and choose **Explore services**; from a device detail page,
+choose **Explore services** for that host.
+
+The explorer uses a bounded worker pool to test common access ports across the target and
+groups confirmed-open endpoints by host. It recognises FTP/FTPS, SSH/SFTP, Telnet,
+HTTP/HTTPS, SMB, AFP, RTSP, IPP, NFS, RDP, VNC and raw printer endpoints. No passwords
+are attempted during discovery: an OPEN result means only that the TCP service accepted
+a connection.
+
+Where Android has a compatible handler, NetScope can hand the service URI to the
+appropriate client app. URIs can always be copied. Plain FTP additionally has a built-in
+**read-only browser**: username/password are kept only in memory, passive mode is used,
+directory contents can be navigated, and no upload/delete/rename command exists. The UI
+warns that FTP itself is unencrypted and recommends SFTP/FTPS where available.
+
+The subnet service scan is deliberately capped at 4096 hosts per run and feeds work
+through a bounded Channel instead of allocating one coroutine per host/port.
+
 ## Export
 
 Results export to JSON or CSV from the Devices screen. Every exported property carries
