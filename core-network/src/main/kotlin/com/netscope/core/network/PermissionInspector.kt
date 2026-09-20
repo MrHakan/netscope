@@ -113,14 +113,6 @@ class PermissionInspector @Inject constructor(
     fun localNetworkPermission(): String? =
         PermissionPolicy.localNetworkPermissionFor(platformState())
 
-    /**
-     * True when the platform gates local network access and the user has not granted it.
-     *
-     * The scan screen uses this to show PERMISSION REQUIRED instead of an empty result,
-     * which would look identical to a network with nothing on it.
-     */
-    fun localNetworkAccessBlocked(): Boolean = !canScanLan()
-
     /** Everything the app may ask for, in the order the UI should present it. */
     fun requirements(): List<PermissionRequirement> {
         val state = platformState()
