@@ -22,6 +22,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import android.content.Intent
+import com.netscope.data.ExportFormat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -48,10 +52,29 @@ fun DevicesScreen(
     viewModel: DevicesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val exportIntent by viewModel.exportIntent.collectAsStateWithLifecycle()
     val progress = state.scan.progress
+    val context = LocalContext.current
+
+    // The share sheet is launched once per export and the intent is then cleared, so a
+    // recomposition cannot reopen it.
+    LaunchedEffect(exportIntent) {
+        exportIntent?.let { intent ->
+            runCatching {
+                context.startActivity(Intent.createChooser(intent, "Export scan results"))
+            }
+            viewModel.onExportIntentHandled()
+        }
+    }
 
     NetScopeScreen(
         title = "Devices",
+        actions = {
+            if (state.scan.devices.isNotEmpty()) {
+                TextButton(onClick = { viewModel.export(ExportFormat.JSON) }) { Text("JSON") }
+                TextButton(onClick = { viewModel.export(ExportFormat.CSV) }) { Text("CSV") }
+            }
+        },
         subtitle = if (progress.isRunning) {
             "Scanning ${progress.target} — ${progress.probed}/${progress.total} — " +
                 "${progress.found} found — ${progress.phase.label}"
@@ -59,72 +82,80 @@ fun DevicesScreen(
             "${state.scan.devices.size} device(s) from the last scan"
         },
     ) { modifier ->
-        Column(modifier = modifier.fillMaxWidth()) {
-            ScanControls(
-                state = state,
-                onTargetChange = viewModel::setTarget,
-                onProfileChange = viewModel::setScanProfile,
-                onStart = viewModel::startScan,
-                onStop = viewModel::stopScan,
-            )
+        // Everything lives in one LazyColumn. Nesting the results list inside a
+        // non-scrolling Column left it only the leftover height, so the list was
+        // squeezed into a sliver at the bottom of the screen and most results were
+        // unreachable.
+        LazyColumn(
+            modifier = modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item {
+                ScanControls(
+                    state = state,
+                    onTargetChange = viewModel::setTarget,
+                    onProfileChange = viewModel::setScanProfile,
+                    onStart = viewModel::startScan,
+                    onStop = viewModel::stopScan,
+                )
+            }
 
             if (progress.isRunning) {
-                LinearProgressIndicator(
-                    progress = { progress.fraction },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp)
-                        .semantics {
-                            contentDescription =
-                                "Scan progress ${(progress.fraction * 100).toInt()} percent"
-                        },
-                )
+                item {
+                    LinearProgressIndicator(
+                        progress = { progress.fraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .semantics {
+                                contentDescription =
+                                    "Scan progress ${(progress.fraction * 100).toInt()} percent"
+                            },
+                    )
+                }
             }
 
             state.scan.error?.let { error ->
-                NoticeBanner(
-                    text = error,
-                    tone = NoticeTone.ERROR,
-                    modifier = Modifier.padding(12.dp),
-                )
+                item { NoticeBanner(text = error, tone = NoticeTone.ERROR) }
             }
 
             progress.message?.let { message ->
-                NoticeBanner(
-                    text = message,
-                    tone = if (state.scan.isDemoData) NoticeTone.WARNING else NoticeTone.INFO,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                )
+                item {
+                    NoticeBanner(
+                        text = message,
+                        tone = if (state.scan.isDemoData) NoticeTone.WARNING else NoticeTone.INFO,
+                    )
+                }
             }
 
-            FiltersRow(state, viewModel::setQuery, viewModel::setFilter)
+            item {
+                FiltersRow(state, viewModel::setQuery, viewModel::setFilter)
+            }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxWidth(),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                items(state.visibleDevices, key = { it.key }) { device ->
-                    DeviceCard(device = device, onClick = { onOpenDevice(device.key) })
-                }
-                if (state.visibleDevices.isEmpty()) {
-                    item {
-                        Text(
-                            text = if (state.scan.devices.isEmpty()) {
-                                "No scan results yet. Choose a target and start a scan."
-                            } else {
-                                "No devices match the current search or filter."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(16.dp),
-                        )
-                    }
+            items(state.visibleDevices, key = { it.key }) { device ->
+                DeviceCard(device = device, onClick = { onOpenDevice(device.key) })
+            }
+
+            if (state.visibleDevices.isEmpty()) {
+                item {
+                    Text(
+                        text = if (state.scan.devices.isEmpty()) {
+                            "No scan results yet. Choose a target and start a scan."
+                        } else {
+                            "No devices match the current search or filter."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
                 }
             }
         }
     }
 
+    // Large ranges and non-private scopes must both be confirmed before any probe is
+    // sent. These were lost in an earlier refactor of this screen; without them a /16
+    // or a public range could be scanned with a single tap.
     state.pendingConfirmation?.let { confirmation ->
         AlertDialog(
             onDismissRequest = viewModel::dismissConfirmation,
@@ -171,7 +202,7 @@ private fun ScanControls(
     onStart: () -> Unit,
     onStop: () -> Unit,
 ) {
-    Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = state.target,
             onValueChange = onTargetChange,
@@ -223,7 +254,7 @@ private fun FiltersRow(
     onQueryChange: (String) -> Unit,
     onFilterChange: (DeviceFilter) -> Unit,
 ) {
-    Column(modifier = Modifier.padding(horizontal = 12.dp)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = state.query,
             onValueChange = onQueryChange,

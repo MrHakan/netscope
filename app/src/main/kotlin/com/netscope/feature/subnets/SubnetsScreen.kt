@@ -12,6 +12,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import com.netscope.core.ui.StatusPill
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -115,6 +116,119 @@ fun SubnetsScreen(
                             } else {
                                 Button(onClick = viewModel::analyze) { Text("Analyze") }
                             }
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionCard(
+                    title = "Reach a specific host",
+                    subtitle = "Tries ICMP, TCP connect on common ports, an HTTP response and " +
+                        "reverse DNS, then reports which one worked",
+                ) {
+                    Column {
+                        OutlinedTextField(
+                            value = state.hostToTest,
+                            onValueChange = viewModel::setHostToTest,
+                            label = { Text("Host address") },
+                            placeholder = { Text("10.0.7.5") },
+                            singleLine = true,
+                            isError = state.hostError != null,
+                            supportingText = state.hostError?.let { { Text(it) } },
+                            textStyle = MonoTextStyle,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Row(
+                            modifier = Modifier.padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (state.isTestingHost) {
+                                OutlinedButton(onClick = viewModel::cancel) { Text("Stop") }
+                                CircularProgressIndicator(
+                                    modifier = Modifier.padding(8.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            } else {
+                                Button(onClick = viewModel::testHost) { Text("Try to connect") }
+                                if (state.report?.observations?.respondingHosts?.isNotEmpty() == true) {
+                                    OutlinedButton(onClick = viewModel::useRespondingHost) {
+                                        Text("Use a host that answered")
+                                    }
+                                }
+                            }
+                        }
+
+                        state.connectionReport?.let { report ->
+                            Column(modifier = Modifier.padding(top = 12.dp)) {
+                                val (background, foreground) = if (report.succeeded) {
+                                    status.reachable to status.onReachable
+                                } else {
+                                    status.warning to status.onWarning
+                                }
+                                StatusPill(
+                                    if (report.succeeded) "REACHABLE" else "NO RESPONSE",
+                                    background,
+                                    foreground,
+                                )
+                                Text(
+                                    report.summary,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.padding(top = 6.dp),
+                                )
+                                Column(modifier = Modifier.padding(top = 8.dp)) {
+                                    report.attempts.forEach { attempt ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            StatusPill(
+                                                if (attempt.succeeded) "OK" else "—",
+                                                if (attempt.succeeded) status.reachable else status.unknown,
+                                                if (attempt.succeeded) status.onReachable else status.onUnknown,
+                                            )
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    "${attempt.technique.label} · ${attempt.target}",
+                                                    style = MonoTextStyle,
+                                                )
+                                                Text(
+                                                    attempt.detail,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                SectionCard(
+                    title = "Scan the whole target subnet",
+                    subtitle = "The analyzer only samples a few addresses; this enumerates them all",
+                ) {
+                    Column {
+                        Text(
+                            "Discovery runs the same engine as the Devices screen, and results " +
+                                "appear there as they are found.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Button(
+                            onClick = viewModel::scanTargetSubnet,
+                            modifier = Modifier.padding(top = 8.dp),
+                        ) { Text("Scan this subnet") }
+                        state.scanStartedFor?.let { target ->
+                            NoticeBanner(
+                                text = "Scanning $target. Open the Devices tab to watch results " +
+                                    "arrive and to stop the scan.",
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
                         }
                     }
                 }

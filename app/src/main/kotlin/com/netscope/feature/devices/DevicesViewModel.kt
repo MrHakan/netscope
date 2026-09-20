@@ -7,7 +7,10 @@ import com.netscope.core.model.DiscoveredDevice
 import com.netscope.core.model.Ipv4Cidr
 import com.netscope.core.model.ScanProfile
 import com.netscope.core.network.NetworkInspector
+import com.netscope.core.network.NetworkInspector as Inspector
+import com.netscope.data.ExportFormat
 import com.netscope.data.ScanController
+import com.netscope.data.ScanExporter
 import com.netscope.data.ScanState
 import com.netscope.data.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -91,7 +94,34 @@ class DevicesViewModel @Inject constructor(
     private val scanController: ScanController,
     private val networkInspector: NetworkInspector,
     private val settingsRepository: SettingsRepository,
+    private val scanExporter: ScanExporter,
 ) : ViewModel() {
+
+    /** Emits an intent for the share sheet; the screen launches it and clears it. */
+    private val _exportIntent = MutableStateFlow<android.content.Intent?>(null)
+    val exportIntent: StateFlow<android.content.Intent?> = _exportIntent
+
+    /**
+     * Exports the current results.
+     *
+     * Nothing leaves the device until the user picks a destination in the system share
+     * sheet, and every exported property carries the source and confidence behind it.
+     */
+    fun export(format: ExportFormat) {
+        viewModelScope.launch {
+            val scan = scanController.state.value
+            if (scan.devices.isEmpty()) {
+                targetError.value = "There is nothing to export yet. Run a scan first."
+                return@launch
+            }
+            val network = withContext(Dispatchers.IO) { networkInspector.activeSnapshot() }
+            _exportIntent.value = scanExporter.export(format, scan.devices, network, scan.metadata)
+        }
+    }
+
+    fun onExportIntentHandled() {
+        _exportIntent.value = null
+    }
 
     private val target = MutableStateFlow("")
     private val targetError = MutableStateFlow<String?>(null)

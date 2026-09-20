@@ -111,7 +111,7 @@ app               feature packages: dashboard, devices, wifi, tools, subnets,
 
 `core-model` is a **pure JVM module** with no Android dependencies, so all subnet, CIDR,
 permission and reasoning logic is unit-testable without Robolectric, an emulator or a
-LAN. That is where the 114 unit tests live — including the permission matrix for every
+LAN. That is where the 123 unit tests live — including the permission matrix for every
 API level from 26 to 37 and the topology derivation.
 
 **Deviation from the specification:** the spec lists eleven separate `feature-*` Gradle
@@ -122,6 +122,30 @@ Hilt/Compose configuration without changing the architecture, and the spec itsel
 for "Clean Architecture principles, not ceremony".
 
 ---
+
+## Reaching a host
+
+The subnet analyzer samples a handful of addresses to answer "is anything there".
+Two things go further:
+
+- **Reach a specific host** runs a battery of techniques against one address — ICMP
+  echo, TCP connect across common ports, an HTTP response, reverse DNS — and reports
+  which one worked. One success proves reachability; all of them failing does not prove
+  the opposite, and the summary says so rather than declaring the host dead.
+- **Scan this subnet** hands the target to the same discovery engine the Devices screen
+  uses, so a routed subnet can be enumerated once it is shown to be reachable.
+
+## Export
+
+Results export to JSON or CSV from the Devices screen. Every exported property carries
+its `source` and `confidence`, and an absent value exports the reason it is absent, so a
+consumer can distinguish "we looked and found nothing" from "Android would not say".
+The top-level JSON keys are `schemaVersion`, `network`, `interfaces`, `routes`,
+`subnets`, `devices`, `services` and `scanMetadata`.
+
+Files are written to the cache directory and shared through a content URI, so no storage
+permission is needed and nothing is left in shared storage. Nothing leaves the device
+until a destination is chosen in the system share sheet.
 
 ## Topology
 
@@ -230,13 +254,11 @@ Stated plainly rather than stubbed:
 - **Root and managed-device modes** — detected and reported as capability levels, but no
   elevated operations are implemented. Nothing in the app requires root.
 - **Router/controller integrations** (UniFi, OpenWrt, MikroTik, SNMP) — M3.
-- **Export to JSON/CSV, WorkManager host monitor, new-device notifications** — M2. The
-  scheduling rules for the host monitor are implemented and tested in
-  `MonitorSchedulingPolicy`; the monitor itself is not built yet. The notification preference exists but currently gates nothing,
+- **WorkManager host monitor and new-device notifications** — M2. The scheduling rules
+  for the monitor are implemented and tested in `MonitorSchedulingPolicy`; the monitor
+  itself is not built yet. The notification preference exists but currently gates nothing,
   and the WorkManager dependency was removed so the app does not request `WAKE_LOCK`,
   `RECEIVE_BOOT_COMPLETED` or `FOREGROUND_SERVICE` for a feature it does not have.
-- **Device labels** persist in the schema but the detail screen's save button is not yet
-  wired to the repository.
 - **Tablet list-detail layouts** — the layouts are responsive but do not yet use a
   two-pane list-detail presentation.
 - **OUI database** ships as a curated ~234-entry subset, not the full IEEE registry. An

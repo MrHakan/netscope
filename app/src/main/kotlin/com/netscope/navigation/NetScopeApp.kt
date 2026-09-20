@@ -32,6 +32,7 @@ import com.netscope.feature.devices.DevicesScreen
 import com.netscope.feature.history.HistoryScreen
 import com.netscope.feature.more.MoreScreen
 import com.netscope.feature.networks.NetworksScreen
+import com.netscope.feature.permissions.PermissionGate
 import com.netscope.feature.settings.SettingsScreen
 import com.netscope.feature.subnets.SubnetsScreen
 import com.netscope.feature.tools.ToolsScreen
@@ -104,6 +105,9 @@ fun NetScopeApp(navController: NavHostController = rememberNavController()) {
         },
     ) { padding ->
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            // Shown over the first screen on first launch, then never again.
+            PermissionGate()
+
             NavHost(navController = navController, startDestination = Routes.DASHBOARD) {
                 composable(Routes.DASHBOARD) {
                     DashboardScreen(

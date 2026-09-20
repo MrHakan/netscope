@@ -26,6 +26,8 @@ data class NetScopeSettings(
     val publicIpLookupEnabled: Boolean = false,
     val newDeviceNotificationsEnabled: Boolean = false,
     val demoModeEnabled: Boolean = false,
+    /** True once the first-launch permission explanation has been shown. */
+    val permissionsPrompted: Boolean = false,
     val bannerGrabbingEnabled: Boolean = false,
     val scanProfile: ScanProfile = ScanProfile.SMART,
     val performanceProfile: PerformanceProfile = PerformanceProfile.BALANCED,
@@ -41,6 +43,7 @@ class SettingsRepository @Inject constructor(
             publicIpLookupEnabled = preferences[PUBLIC_IP] ?: false,
             newDeviceNotificationsEnabled = preferences[NEW_DEVICE_NOTIFICATIONS] ?: false,
             demoModeEnabled = preferences[DEMO_MODE] ?: false,
+            permissionsPrompted = preferences[PERMISSIONS_PROMPTED] ?: false,
             bannerGrabbingEnabled = preferences[BANNER_GRABBING] ?: false,
             scanProfile = preferences[SCAN_PROFILE]
                 ?.let { runCatching { ScanProfile.valueOf(it) }.getOrNull() }
@@ -54,6 +57,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setPublicIpLookupEnabled(enabled: Boolean) = put(PUBLIC_IP, enabled)
     suspend fun setNewDeviceNotificationsEnabled(enabled: Boolean) = put(NEW_DEVICE_NOTIFICATIONS, enabled)
     suspend fun setDemoModeEnabled(enabled: Boolean) = put(DEMO_MODE, enabled)
+    suspend fun setPermissionsPrompted(prompted: Boolean) = put(PERMISSIONS_PROMPTED, prompted)
     suspend fun setBannerGrabbingEnabled(enabled: Boolean) = put(BANNER_GRABBING, enabled)
 
     suspend fun setScanProfile(profile: ScanProfile) {
@@ -72,6 +76,7 @@ class SettingsRepository @Inject constructor(
         val PUBLIC_IP = booleanPreferencesKey("public_ip_lookup_enabled")
         val NEW_DEVICE_NOTIFICATIONS = booleanPreferencesKey("new_device_notifications_enabled")
         val DEMO_MODE = booleanPreferencesKey("demo_mode_enabled")
+        val PERMISSIONS_PROMPTED = booleanPreferencesKey("permissions_prompted")
         val BANNER_GRABBING = booleanPreferencesKey("banner_grabbing_enabled")
         val SCAN_PROFILE = stringPreferencesKey("scan_profile")
         val PERFORMANCE_PROFILE = stringPreferencesKey("performance_profile")

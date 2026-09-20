@@ -49,6 +49,22 @@ class HistoryRepository @Inject constructor(
 
     suspend fun setDeviceLabel(deviceId: Long, label: String?) = deviceDao.setUserLabel(deviceId, label)
 
+    /**
+     * Labels a device by its address rather than its row id.
+     *
+     * The detail screen knows the device key from the scan, not the database id, and a
+     * device may not have been written yet when the user names it.
+     */
+    suspend fun setDeviceLabelByKey(profileId: Long, deviceKey: String, label: String?): Boolean {
+        val existing = deviceDao.find(profileId, deviceKey) ?: return false
+        deviceDao.setUserLabel(existing.id, label)
+        return true
+    }
+
+    /** Stored labels for a profile, so a scan can show names the user already set. */
+    suspend fun labelsForProfile(profileId: Long): Map<String, String> =
+        deviceDao.labelledDevices(profileId).associate { it.deviceKey to it.userLabel }
+
     suspend fun deleteProfile(profileId: Long) = profileDao.delete(profileId)
 
     suspend fun clearHistory() = sessionDao.deleteAll()
