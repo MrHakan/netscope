@@ -94,9 +94,9 @@ fun ServiceExplorerScreen(
 
             item {
                 NoticeBanner(
-                    text = "Service discovery only attempts TCP connections to common access ports. " +
-                        "It does not try passwords or vulnerability checks. OPEN means the port " +
-                        "accepted a connection; authentication may still be required.",
+                    text = "Service discovery attempts TCP connections to common access and " +
+                        "infrastructure ports. It does not try passwords or vulnerability checks. " +
+                        "OPEN means the port accepted a connection; authentication may still be required.",
                 )
             }
 
@@ -151,6 +151,14 @@ fun ServiceExplorerScreen(
                                                     "TCP connect: " + it + " ms",
                                                     style = MaterialTheme.typography.bodySmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                )
+                                            }
+                                            endpoint.banner?.let { banner ->
+                                                Text(
+                                                    banner,
+                                                    style = MonoSmallTextStyle,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 3,
                                                 )
                                             }
                                         }
