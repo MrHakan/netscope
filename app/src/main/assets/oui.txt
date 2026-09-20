@@ -1,0 +1,243 @@
+# NetScope offline OUI table.
+#
+# Format: six uppercase hex digits, a tab, then the vendor name.
+# This is a curated subset of the IEEE MA-L registry covering manufacturers common on
+# home and office networks. A prefix that is not listed here reports NOT DISCOVERED —
+# NetScope never guesses a vendor.
+#
+# To extend it, append lines in the same format. Locally administered (randomised) MAC
+# addresses are never looked up at all.
+000C29	VMware, Inc.
+005056	VMware, Inc.
+000569	VMware, Inc.
+001C14	VMware, Inc.
+080027	Oracle VirtualBox virtual NIC
+0A0027	Oracle VirtualBox host-only
+525400	QEMU / KVM virtual NIC
+B827EB	Raspberry Pi Foundation
+DCA632	Raspberry Pi Trading Ltd
+E45F01	Raspberry Pi Trading Ltd
+2CCF67	Raspberry Pi Ltd
+D83ADD	Raspberry Pi Trading Ltd
+001B63	Apple, Inc.
+0017F2	Apple, Inc.
+3C0754	Apple, Inc.
+F0189E	Apple, Inc.
+A45E60	Apple, Inc.
+7CD1C3	Apple, Inc.
+04D3CF	Apple, Inc.
+9801A7	Apple, Inc.
+001A11	Google, Inc.
+3C5AB4	Google, Inc.
+F4F5D8	Google, Inc.
+A4778C	Google, Inc.
+DAA119	Google, Inc.
+001132	Synology Incorporated
+0011D8	ASUSTek COMPUTER INC.
+2C56DC	ASUSTek COMPUTER INC.
+AC220B	ASUSTek COMPUTER INC.
+50465D	ASUSTek COMPUTER INC.
+000D88	D-Link Corporation
+1CBDB9	D-Link International
+C8BE19	D-Link International
+000FB5	NETGEAR
+20E52A	NETGEAR
+A040A0	NETGEAR
+9CD36D	NETGEAR
+14CC20	TP-LINK TECHNOLOGIES CO.,LTD.
+50C7BF	TP-LINK TECHNOLOGIES CO.,LTD.
+A42BB0	TP-LINK TECHNOLOGIES CO.,LTD.
+C46E1F	TP-LINK TECHNOLOGIES CO.,LTD.
+0418D6	Ubiquiti Networks Inc.
+24A43C	Ubiquiti Networks Inc.
+44D9E7	Ubiquiti Networks Inc.
+788A20	Ubiquiti Networks Inc.
+F09FC2	Ubiquiti Networks Inc.
+74ACB9	Ubiquiti Inc.
+E063DA	Ubiquiti Networks Inc.
+0007B8	MikroTik
+4C5E0C	MikroTik
+6C3B6B	MikroTik
+B869F4	MikroTik
+DC2C6E	MikroTik
+08002B	Digital Equipment Corporation
+00000C	Cisco Systems, Inc
+000142	Cisco Systems, Inc
+0025B4	Cisco Systems, Inc
+00505E	Cisco Systems, Inc
+5C5015	Cisco Systems, Inc
+001A1E	Aruba Networks
+000B86	Aruba Networks
+94B40F	Aruba Networks
+001185	Hewlett Packard
+0017A4	Hewlett Packard
+3CD92B	Hewlett Packard
+9C8E99	Hewlett Packard
+001321	Hewlett Packard
+002655	Hewlett Packard
+000BCD	Hewlett Packard
+001560	Hewlett Packard
+0021F7	Hewlett-Packard Company
+001E0B	Hewlett Packard
+0004EA	Hewlett Packard
+000E7F	Hewlett Packard
+00110A	Hewlett Packard
+001708	Hewlett Packard
+0018FE	Hewlett-Packard Company
+001B78	Hewlett-Packard Company
+001CC4	Hewlett-Packard Company
+002264	Hewlett-Packard Company
+00237D	Hewlett-Packard Company
+001F29	Hewlett-Packard Company
+000874	Dell Inc.
+00188B	Dell Inc.
+001EC9	Dell Inc.
+B8AC6F	Dell Inc.
+F8BC12	Dell Inc.
+18DBF2	Dell Inc.
+001B21	Intel Corporate
+001E67	Intel Corporate
+3C9709	Intel Corporate
+A0A8CD	Intel Corporate
+94659C	Intel Corporate
+7C7A91	Intel Corporate
+0026B9	Dell Inc.
+000AF7	Broadcom
+001018	Broadcom
+000C6E	ASUSTek COMPUTER INC.
+000E08	Cisco-Linksys, LLC
+001839	Cisco-Linksys, LLC
+00226B	Cisco-Linksys, LLC
+001A70	Cisco-Linksys, LLC
+002129	Cisco-Linksys, LLC
+001310	Cisco-Linksys, LLC
+001DBA	Sony Corporation
+30F9ED	Sony Corporation
+FCF152	Sony Corporation
+0024BE	Sony Corporation
+001E3D	Samsung Electronics
+0012FB	Samsung Electronics
+5CF6DC	Samsung Electronics
+78BDBC	Samsung Electronics
+E8508B	Samsung Electronics
+C06599	Samsung Electronics
+00E091	LG Electronics
+001C62	LG Electronics
+2C598A	LG Electronics
+A816B2	LG Electronics
+001AA9	Brother Industries, LTD.
+008077	Brother Industries, LTD.
+3C2AF4	Brother Industries, LTD.
+008092	Silex Technology
+00000E	Fujitsu Limited
+0000AA	Xerox Corporation
+000048	Seiko Epson Corporation
+001125	Seiko Epson Corporation
+A4EE57	Seiko Epson Corporation
+0026AB	Seiko Epson Corporation
+00000F	NeXT
+000085	Canon Inc.
+001E8F	Canon Inc.
+2C9EFC	Canon Inc.
+88873D	Canon Inc.
+0000F0	Samsung Electronics
+001BA9	Brother Industries, LTD.
+0090CC	PLANEX COMMUNICATIONS
+002191	D-Link Corporation
+001195	D-Link Corporation
+0080C8	D-Link Systems, Inc.
+001CF0	D-Link Corporation
+001346	D-Link Corporation
+001E58	D-Link Corporation
+001B11	D-Link Corporation
+00089B	ICP Electronics Inc.
+003044	CradlePoint
+000E58	Sonos, Inc.
+5CAAFD	Sonos, Inc.
+B8E937	Sonos, Inc.
+949F3E	Sonos, Inc.
+0C8268	QNAP Systems, Inc.
+245EBE	QNAP Systems, Inc.
+001C23	Dell Inc.
+6805CA	Intel Corporate
+9CB6D0	Rivet Networks
+B4B686	Hewlett Packard
+001A2B	Ayecom Technology
+00095B	NETGEAR
+00146C	NETGEAR
+00223F	NETGEAR
+30469A	NETGEAR
+E0469A	NETGEAR
+C03F0E	NETGEAR
+00265A	D-Link Corporation
+1C7EE5	D-Link International
+78542E	D-Link International
+002401	D-Link International
+340804	D-Link International
+001CDF	Belkin International Inc.
+944452	Belkin International Inc.
+08863B	Belkin International Inc.
+C05627	Belkin International Inc.
+001501	Amazon Technologies Inc.
+44650D	Amazon Technologies Inc.
+F0272D	Amazon Technologies Inc.
+0C47C9	Amazon Technologies Inc.
+685448	Amazon Technologies Inc.
+A002DC	Amazon Technologies Inc.
+18742E	Amazon Technologies Inc.
+001D0F	TP-LINK TECHNOLOGIES CO.,LTD.
+647002	TP-LINK TECHNOLOGIES CO.,LTD.
+E894F6	TP-LINK TECHNOLOGIES CO.,LTD.
+B0487A	TP-LINK TECHNOLOGIES CO.,LTD.
+30B5C2	TP-LINK TECHNOLOGIES CO.,LTD.
+001478	TP-LINK TECHNOLOGIES CO.,LTD.
+002127	TP-LINK TECHNOLOGIES CO.,LTD.
+5C899A	Hon Hai Precision Ind. Co.,Ltd.
+0024D7	Intel Corporate
+8C705A	Intel Corporate
+5CE0C5	Intel Corporate
+7C5CF8	Intel Corporate
+E4B318	Intel Corporate
+001517	Intel Corporate
+0024D6	Intel Corporate
+0016EA	Intel Corporate
+001B77	Intel Corporate
+AC7BA1	Intel Corporate
+0013CE	Intel Corporate
+0019D2	Intel Corporate
+001E65	Intel Corporate
+00216A	Intel Corporate
+0022FB	Intel Corporate
+002314	Intel Corporate
+0026C6	Intel Corporate
+1C3E84	Hon Hai Precision Ind. Co.,Ltd.
+2816A8	Hon Hai Precision Ind. Co.,Ltd.
+002268	Hon Hai Precision Ind. Co.,Ltd.
+00248C	ASUSTek COMPUTER INC.
+1C872C	ASUSTek COMPUTER INC.
+38D547	ASUSTek COMPUTER INC.
+704D7B	ASUSTek COMPUTER INC.
+BCEE7B	ASUSTek COMPUTER INC.
+F832E4	ASUSTek COMPUTER INC.
+00265E	Hon Hai Precision Ind. Co.,Ltd.
+001F3B	Intel Corporate
+5CC5D4	Intel Corporate
+9C4E36	Intel Corporate
+4C3488	Intel Corporate
+A4C3F0	Intel Corporate
+340293	Intel Corporate
+001DE0	Intel Corporate
+485AB6	Hon Hai Precision Ind. Co.,Ltd.
+0026F2	NETGEAR
+001F33	NETGEAR
+28C68E	NETGEAR
+6C198F	D-Link International
+00184D	NETGEAR
+001E2A	NETGEAR
+204E7F	NETGEAR
+001B2F	NETGEAR
+2C3033	NETGEAR
+841B5E	NETGEAR
+B03956	NETGEAR
+008EF2	NETGEAR
+4C60DE	NETGEAR

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      The product name lives here and in the applicationId alone, so renaming the app
+      is a two-line change. No Kotlin source contains the literal.
+    -->
+    <string name="app_name">NetScope</string>
+</resources>
