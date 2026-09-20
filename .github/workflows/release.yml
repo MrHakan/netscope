@@ -20,8 +20,15 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # packages: '' stops the action from installing the obsolete "tools" package,
+      # which no longer exists in the SDK repository and makes sdkmanager exit 1.
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: ''
+
+      - name: Install the SDK components this project builds against
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
 
       # Signing material comes from repository secrets. The `secrets` context is not
       # available in a step-level `if`, so the check happens inside the script and the
