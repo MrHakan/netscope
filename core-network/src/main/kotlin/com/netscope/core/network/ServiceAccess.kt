@@ -68,12 +68,21 @@ enum class AccessProtocol(
 }
 
 /** One open service endpoint found by the service explorer. */
+enum class ServiceIdentification {
+    /** The TCP port is open; the protocol label comes only from the well-known port number. */
+    PORT_INFERENCE,
+
+    /** Reserved for a future protocol-aware handshake that positively identifies the service. */
+    VERIFIED,
+}
+
 data class ServiceEndpoint(
     val host: String,
     val port: Int,
     val protocol: AccessProtocol,
     val latencyMillis: Long?,
     val banner: String? = null,
+    val identification: ServiceIdentification = ServiceIdentification.PORT_INFERENCE,
 ) {
     val uri: String? get() = ServiceCatalog.uriFor(protocol, host, port)
 }
