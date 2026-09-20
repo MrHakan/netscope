@@ -49,6 +49,8 @@ data class ScanState(
     val metadata: ScanMetadata? = null,
     val error: String? = null,
     val isDemoData: Boolean = false,
+    /** The network profile these results belong to, when one could be resolved. */
+    val profileId: Long? = null,
 )
 
 /**
@@ -160,9 +162,14 @@ class ScanController @Inject constructor(
         }.orEmpty()
         val previousDevices = emptyList<DiscoveredDevice>()
 
+        val storedLabels = profileId?.let {
+            runCatching { historyRepository.labelsForProfile(it) }.getOrNull()
+        }.orEmpty()
+
         _state.value = ScanState(
             devices = emptyList(),
             progress = scanEngine.progress.value.copy(isRunning = true, target = target.toString()),
+            profileId = profileId,
         )
 
         val collector = scope.launch {
@@ -189,7 +196,11 @@ class ScanController @Inject constructor(
                 boundInterfaceAddress = boundAddress,
             )
 
-            val enriched = enrichWithVendors(devices)
+            // A name the user chose outranks anything discovery produced.
+            val labelled = devices.map { device ->
+                storedLabels[device.key]?.let { device.copy(userLabel = it) } ?: device
+            }
+            val enriched = enrichWithVendors(labelled)
 
             val metadata = ScanMetadata(
                 scanId = 0,
@@ -227,6 +238,21 @@ class ScanController @Inject constructor(
         } finally {
             collector.cancel()
         }
+    }
+
+    /**
+     * Applies a user label to the in-memory results.
+     *
+     * Persistence is the repository's job; this keeps the visible list in step so the
+     * new name appears immediately rather than after the next scan.
+     */
+    fun applyUserLabel(deviceKey: String, label: String?) {
+        val current = _state.value
+        _state.value = current.copy(
+            devices = current.devices.map { device ->
+                if (device.key == deviceKey) device.copy(userLabel = label) else device
+            },
+        )
     }
 
     /** Fills in vendors for the few devices that volunteered a MAC address. */

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!--
+      Exports are written to the cache directory and shared through a content URI, so
+      no storage permission is needed and the file is not left in shared storage.
+    -->
+    <cache-path name="exports" path="exports/" />
+</paths>

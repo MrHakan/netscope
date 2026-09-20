@@ -183,6 +183,14 @@ fun DeviceDetailScreen(
                             onClick = viewModel::saveLabel,
                             modifier = Modifier.padding(top = 8.dp),
                         ) { Text("Save label") }
+                        state.saveResult?.let { result ->
+                            Text(
+                                result,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
                     }
                 }
             }

@@ -8,6 +8,9 @@ import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
+/** Projection for the stored user labels of a profile. */
+data class LabelledDevice(val deviceKey: String, val userLabel: String)
+
 @Dao
 interface NetworkProfileDao {
 
@@ -103,6 +106,12 @@ interface DeviceDao {
 
     @Query("SELECT deviceKey FROM device_records WHERE profileId = :profileId")
     suspend fun keysForProfile(profileId: Long): List<String>
+
+    @Query(
+        "SELECT deviceKey, userLabel FROM device_records " +
+            "WHERE profileId = :profileId AND userLabel IS NOT NULL",
+    )
+    suspend fun labelledDevices(profileId: Long): List<LabelledDevice>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insert(device: DeviceRecordEntity): Long
