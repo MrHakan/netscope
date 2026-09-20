@@ -1,5 +1,7 @@
 name: Release
 
+# Release retry marker: signing secrets configured
+
 on:
   push:
     tags: ["v*"]
