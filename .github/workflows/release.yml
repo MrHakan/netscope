@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     tags: ["v*"]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
@@ -10,11 +11,12 @@ permissions:
 
 # Two pushes of the same tag must not race to publish the same release.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.repository }}
   cancel-in-progress: false
 
 jobs:
   release:
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch' || startsWith(github.event.head_commit.message, 'release:')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,14 +53,14 @@ jobs:
           echo "App declares versionName=$VERSION_NAME versionCode=$VERSION_CODE"
           echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "versionCode=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
 
           if [ "${GITHUB_REF_TYPE:-}" != "tag" ]; then
-            echo "Not a tag build; skipping the tag/version comparison."
+            echo "Not a tag build; release tag will be v$VERSION_NAME."
             exit 0
           fi
 
           TAG="${GITHUB_REF_NAME}"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           if [ "$TAG" != "v$VERSION_NAME" ]; then
             echo "::error::Tag $TAG does not match versionName $VERSION_NAME." \
               "Bump versionName in app/build.gradle.kts, or retag as v$VERSION_NAME."
@@ -144,9 +146,11 @@ jobs:
           retention-days: 30
 
       - name: Publish the release with the signed APK
-        if: github.ref_type == 'tag' && steps.signing.outputs.signed == 'true'
+        if: steps.signing.outputs.signed == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: NetScope ${{ steps.version.outputs.tag }}
           files: |
             dist/*.apk
@@ -170,9 +174,11 @@ jobs:
       # for testing but must never be attached to a release as though it were official,
       # so the release is still published and the APK is left as a workflow artifact.
       - name: Publish the release without an APK
-        if: github.ref_type == 'tag' && steps.signing.outputs.signed != 'true'
+        if: steps.signing.outputs.signed != 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: NetScope ${{ steps.version.outputs.tag }}
           generate_release_notes: true
           body: |
