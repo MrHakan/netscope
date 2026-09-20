@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 data class ServiceExplorerUiState(
@@ -40,6 +42,7 @@ class ServiceExplorerViewModel @Inject constructor(
     val state: StateFlow<ServiceExplorerUiState> = _state.asStateFlow()
 
     private var scanJob: Job? = null
+    private val resultMutex = Mutex()
 
     fun setTarget(value: String) {
         if (_state.value.isScanning) return
@@ -79,22 +82,24 @@ class ServiceExplorerViewModel @Inject constructor(
             )
             try {
                 val onEndpoint: suspend (ServiceEndpoint) -> Unit = { endpoint ->
-                    val current = _state.value.endpoints
-                    if (current.none {
-                            it.host == endpoint.host &&
-                                it.port == endpoint.port &&
-                                it.protocol == endpoint.protocol
-                        }
-                    ) {
-                        _state.value = _state.value.copy(
-                            endpoints = (current + endpoint).sortedWith(
-                                compareBy<ServiceEndpoint>(
-                                    { Ipv4Address.parse(it.host)?.value ?: Long.MAX_VALUE },
-                                    { it.port },
-                                    { it.protocol.name },
+                    resultMutex.withLock {
+                        val current = _state.value.endpoints
+                        if (current.none {
+                                it.host == endpoint.host &&
+                                    it.port == endpoint.port &&
+                                    it.protocol == endpoint.protocol
+                            }
+                        ) {
+                            _state.value = _state.value.copy(
+                                endpoints = (current + endpoint).sortedWith(
+                                    compareBy<ServiceEndpoint>(
+                                        { Ipv4Address.parse(it.host)?.value ?: Long.MAX_VALUE },
+                                        { it.port },
+                                        { it.protocol.name },
+                                    ),
                                 ),
-                            ),
-                        )
+                            )
+                        }
                     }
                 }
                 val onProgress: suspend (ServiceScanProgress) -> Unit = { progress ->
