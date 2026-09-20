@@ -37,8 +37,8 @@ never be mistaken for an official one.
 3. Tag and push:
 
    ```bash
-   git tag -a v0.1.0 -m "NetScope v0.1.0"
-   git push origin v0.1.0
+   git tag -a v0.2.0 -m "NetScope v0.2.0"
+   git push origin v0.2.0
    ```
 
 Pushing a `v*` tag triggers `.github/workflows/release.yml`, which runs the unit tests,
