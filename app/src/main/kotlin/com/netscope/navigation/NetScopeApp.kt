@@ -39,6 +39,7 @@ import com.netscope.feature.permissions.PermissionGate
 import com.netscope.feature.settings.SettingsScreen
 import com.netscope.feature.subnets.SubnetsScreen
 import com.netscope.feature.tools.ToolsScreen
+import com.netscope.feature.toolkit.ToolkitScreen
 import com.netscope.feature.wifi.WifiScreen
 
 /** Every route in the app. Keeping them in one place makes deep links trivial to add. */
@@ -53,6 +54,7 @@ object Routes {
     const val SUBNETS = "subnets"
     const val HISTORY = "history"
     const val SETTINGS = "settings"
+    const val TOOLKIT = "toolkit"
     const val SERVICES = "services?target={target}"
     const val FTP_BROWSER = "ftp?host={host}&port={port}"
 
@@ -145,6 +147,7 @@ fun NetScopeApp(navController: NavHostController = rememberNavController()) {
                         onOpenNetworks = { navController.navigate(Routes.NETWORKS) },
                         onOpenSubnets = { navController.navigate(Routes.SUBNETS) },
                         onOpenHistory = { navController.navigate(Routes.HISTORY) },
+                        onOpenToolkit = { navController.navigate(Routes.TOOLKIT) },
                         onOpenSettings = { navController.navigate(Routes.SETTINGS) },
                     )
                 }
@@ -157,6 +160,7 @@ fun NetScopeApp(navController: NavHostController = rememberNavController()) {
                 }
                 composable(Routes.HISTORY) { HistoryScreen(onBack = { navController.popBackStack() }) }
                 composable(Routes.SETTINGS) { SettingsScreen(onBack = { navController.popBackStack() }) }
+                composable(Routes.TOOLKIT) { ToolkitScreen(onBack = { navController.popBackStack() }) }
                 composable(Routes.SERVICES) {
                     ServiceExplorerScreen(
                         onBack = { navController.popBackStack() },
