@@ -196,7 +196,7 @@ class SshReadOnlyMonitor @Inject constructor() {
     }
 
     private fun toInfo(host: String, port: Int, key: HostKey): SshHostKeyInfo {
-        val raw = key.key
+        val raw = Base64.getDecoder().decode(key.key)
         return SshHostKeyInfo(
             host = host,
             port = port,
@@ -244,7 +244,7 @@ class SshReadOnlyMonitor @Inject constructor() {
         override fun getKnownHostsRepositoryID(): String = "NetScope in-memory trusted host key"
 
         override fun getHostKey(): Array<HostKey> =
-            arrayOf(HostKey(expected.host, expected.algorithm, Base64.getDecoder().decode(expected.keyBase64)))
+            arrayOf(HostKey(expected.host, Base64.getDecoder().decode(expected.keyBase64)))
 
         override fun getHostKey(host: String?, type: String?): Array<HostKey> = getHostKey()
     }
