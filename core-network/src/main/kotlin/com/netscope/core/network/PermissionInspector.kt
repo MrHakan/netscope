@@ -48,6 +48,7 @@ class PermissionInspector @Inject constructor(
         val candidates = buildSet {
             addAll(NetScopePermissions.LOCAL_NETWORK_CANDIDATES)
             add(NetScopePermissions.NEARBY_WIFI_DEVICES)
+            add(NetScopePermissions.ACCESS_COARSE_LOCATION)
             add(NetScopePermissions.ACCESS_FINE_LOCATION)
             add(NetScopePermissions.POST_NOTIFICATIONS)
         }
