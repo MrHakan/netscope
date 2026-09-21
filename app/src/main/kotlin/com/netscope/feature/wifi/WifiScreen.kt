@@ -152,7 +152,7 @@ fun WifiScreen(viewModel: WifiViewModel = hiltViewModel()) {
             }
 
             items(state.visibleNetworks, key = { it.bssid }) { entry ->
-                AccessPointCard(entry)
+                AccessPointCard(entry, state.vendors[entry.bssid])
             }
 
             if (state.visibleNetworks.isEmpty() && state.availability == WifiScanAvailability.Available) {
@@ -345,7 +345,7 @@ private fun ChannelGraphCard(networks: List<WifiScanEntry>) {
 }
 
 @Composable
-private fun AccessPointCard(entry: WifiScanEntry) {
+private fun AccessPointCard(entry: WifiScanEntry, vendor: String?) {
     val status = LocalStatusColors.current
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -382,13 +382,16 @@ private fun AccessPointCard(entry: WifiScanEntry) {
                 )
             }
             Text(entry.bssid, style = MonoSmallTextStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            PlainRow("Manufacturer", vendor ?: "NOT DISCOVERED")
             PlainRow(
                 "Channel",
                 "${entry.channel ?: "unknown"} · ${entry.band?.label ?: "unknown band"} · " +
                     "${entry.frequencyMhz} MHz",
             )
             PlainRow("Width", entry.channelWidthMhz?.let { "$it MHz" } ?: "NOT DISCOVERED")
-            PlainRow("Security", entry.securityCapabilities.ifEmpty { "NOT DISCOVERED" })
+            PlainRow("Security", entry.securitySummary)
+            PlainRow("Cipher", entry.cipherSummary)
+            PlainRow("WPS advertised", if (entry.wpsSupported) "Yes" else "No / not advertised")
             PlainRow("Generation", entry.wifiStandard ?: "NOT DISCOVERED")
             PlainRow("Result age", "${entry.ageMillis / 1000} s old")
         }
