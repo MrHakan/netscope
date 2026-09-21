@@ -1,5 +1,6 @@
 package com.netscope.core.network
 
+import com.netscope.core.model.PortState
 import com.netscope.core.model.ProbeType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -27,6 +28,7 @@ data class ConnectionAttempt(
     val succeeded: Boolean,
     val latencyMillis: Double?,
     val detail: String,
+    val tcpState: PortState? = null,
 )
 
 /**
@@ -45,7 +47,10 @@ data class ConnectionReport(
     val succeeded: Boolean get() = proofOfLife != null
     val openPorts: List<Int>
         get() = attempts
-            .filter { it.technique == ConnectionTechnique.TCP_CONNECT && it.succeeded }
+            .filter {
+                it.technique == ConnectionTechnique.TCP_CONNECT &&
+                    it.tcpState == PortState.OPEN
+            }
             .mapNotNull { it.target.substringAfterLast(':').toIntOrNull() }
 }
 
@@ -111,19 +116,27 @@ class ConnectionTester @Inject constructor(
         val tcpAttempts = ports.map { port ->
             async(Dispatchers.IO) {
                 semaphore.withPermit {
-                    val outcome = hostProber.tcpConnect(address, port, timeoutMillis)
+                    val result = hostProber.scanPort(address, port, timeoutMillis)
                     ConnectionAttempt(
                         technique = ConnectionTechnique.TCP_CONNECT,
                         target = "$host:$port",
-                        succeeded = outcome.responded,
-                        latencyMillis = outcome.latencyMillis,
-                        detail = outcome.detail,
+                        succeeded = result.state == PortState.OPEN,
+                        latencyMillis = result.latencyMillis?.toDouble(),
+                        detail = when (result.state) {
+                            PortState.OPEN -> "TCP port $port accepted a connection."
+                            PortState.CLOSED -> "TCP port $port refused the connection; the RST proves the host responded."
+                            PortState.FILTERED_OR_TIMEOUT ->
+                                "TCP port $port timed out or was filtered; this proves nothing about host absence."
+                        },
+                        tcpState = result.state,
                     )
                 }
             }
         }.awaitAll()
-        attempts += tcpAttempts.filter { it.succeeded }
-        val silentPorts = tcpAttempts.count { !it.succeeded }
+        attempts += tcpAttempts.filter {
+            it.tcpState == PortState.OPEN || it.tcpState == PortState.CLOSED
+        }
+        val silentPorts = tcpAttempts.count { it.tcpState == PortState.FILTERED_OR_TIMEOUT }
         if (silentPorts > 0) {
             attempts += ConnectionAttempt(
                 technique = ConnectionTechnique.TCP_CONNECT,
@@ -165,7 +178,8 @@ class ConnectionTester @Inject constructor(
         )
 
         val proof = attempts.firstOrNull {
-            it.succeeded && it.technique != ConnectionTechnique.REVERSE_DNS
+            (it.succeeded && it.technique != ConnectionTechnique.REVERSE_DNS) ||
+                (it.technique == ConnectionTechnique.TCP_CONNECT && it.tcpState == PortState.CLOSED)
         }
 
         ConnectionReport(
@@ -184,11 +198,21 @@ class ConnectionTester @Inject constructor(
     ): String {
         if (proof != null) {
             val openPorts = attempts
-                .filter { it.technique == ConnectionTechnique.TCP_CONNECT && it.succeeded }
+                .filter {
+                    it.technique == ConnectionTechnique.TCP_CONNECT &&
+                        it.tcpState == PortState.OPEN
+                }
                 .mapNotNull { it.target.substringAfterLast(':').toIntOrNull() }
             return buildString {
-                append("$host is reachable from this device: ${proof.technique.label} succeeded")
-                proof.latencyMillis?.let { append(" in %.1f ms".format(it)) }
+                append("$host is reachable from this device: ")
+                if (proof.technique == ConnectionTechnique.TCP_CONNECT &&
+                    proof.tcpState == PortState.CLOSED
+                ) {
+                    append("a TCP port refused the connection, which proves the host answered")
+                } else {
+                    append(proof.technique.label + " succeeded")
+                    proof.latencyMillis?.let { append(" in %.1f ms".format(it)) }
+                }
                 append(". ")
                 if (openPorts.isNotEmpty()) {
                     append("Accepting connections on ${openPorts.joinToString(", ")}. ")
