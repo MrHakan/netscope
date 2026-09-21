@@ -292,6 +292,21 @@ private fun DnsTool(state: ToolsUiState, viewModel: ToolsViewModel) {
                     )
                 }
             }
+            Row(
+                modifier = Modifier.padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                FilterChip(
+                    selected = state.dnsRecursionDesired,
+                    onClick = { viewModel.setDnsRecursionDesired(true) },
+                    label = { Text("Recursive") },
+                )
+                FilterChip(
+                    selected = !state.dnsRecursionDesired,
+                    onClick = { viewModel.setDnsRecursionDesired(false) },
+                    label = { Text("+norec") },
+                )
+            }
             RunButton(state.busy, "Look up", viewModel::runDnsLookup, viewModel::cancel)
 
             state.dnsResult?.let { result ->
