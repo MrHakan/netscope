@@ -69,6 +69,9 @@ interface ScanSessionDao {
     @Query("SELECT * FROM scan_sessions WHERE id = :id")
     suspend fun findById(id: Long): ScanSessionEntity?
 
+    @Query("SELECT * FROM scan_sessions WHERE profileId = :profileId ORDER BY startedAtEpochMillis DESC LIMIT 1")
+    suspend fun latestForProfile(profileId: Long): ScanSessionEntity?
+
     @Insert
     suspend fun insert(session: ScanSessionEntity): Long
 

@@ -48,6 +48,7 @@ class PermissionInspector @Inject constructor(
         val candidates = buildSet {
             addAll(NetScopePermissions.LOCAL_NETWORK_CANDIDATES)
             add(NetScopePermissions.NEARBY_WIFI_DEVICES)
+            add(NetScopePermissions.ACCESS_COARSE_LOCATION)
             add(NetScopePermissions.ACCESS_FINE_LOCATION)
             add(NetScopePermissions.POST_NOTIFICATIONS)
         }
@@ -117,19 +118,36 @@ class PermissionInspector @Inject constructor(
     fun requirements(): List<PermissionRequirement> {
         val state = platformState()
         return buildList {
-            val wifiPermission = PermissionPolicy.wifiPermissionFor(state)
             val wifiVerdict = PermissionPolicy.verdict(CapabilityArea.ACCESS_POINT_SCAN, state)
-            add(
-                PermissionRequirement(
-                    permission = wifiPermission,
-                    title = "Wi-Fi scanning",
-                    rationale = (wifiVerdict as? CapabilityVerdict.PermissionRequired)?.rationale
-                        ?: "Lists nearby access points and reads the connected network's SSID.",
-                    isGranted = wifiPermission in state.grantedPermissions,
-                    isDefinedByPlatform = wifiPermission in state.platformDefinedPermissions,
-                    isOptional = true,
-                ),
-            )
+            PermissionPolicy.wifiScanPermissionsFor(state).forEach { wifiPermission ->
+                add(
+                    PermissionRequirement(
+                        permission = wifiPermission,
+                        title = "Wi-Fi access-point scanning",
+                        rationale = (wifiVerdict as? CapabilityVerdict.PermissionRequired)?.rationale
+                            ?: "Lists nearby access points. NetScope does not use this permission to track location.",
+                        isGranted = wifiPermission in state.grantedPermissions,
+                        isDefinedByPlatform = wifiPermission in state.platformDefinedPermissions,
+                        isOptional = true,
+                    ),
+                )
+            }
+
+            val connectedPermission = PermissionPolicy.wifiPermissionFor(state)
+            if (connectedPermission !in PermissionPolicy.wifiScanPermissionsFor(state)) {
+                val connectedVerdict = PermissionPolicy.verdict(CapabilityArea.WIFI_INFO, state)
+                add(
+                    PermissionRequirement(
+                        permission = connectedPermission,
+                        title = "Connected Wi-Fi details",
+                        rationale = (connectedVerdict as? CapabilityVerdict.PermissionRequired)?.rationale
+                            ?: "Reads SSID/BSSID and connection metadata for the active Wi-Fi network.",
+                        isGranted = connectedPermission in state.grantedPermissions,
+                        isDefinedByPlatform = connectedPermission in state.platformDefinedPermissions,
+                        isOptional = true,
+                    ),
+                )
+            }
 
             PermissionPolicy.localNetworkPermissionFor(state)?.let { permission ->
                 val verdict = PermissionPolicy.verdict(CapabilityArea.LAN_SCAN, state)

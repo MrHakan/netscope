@@ -114,6 +114,7 @@ data class WifiScanEntry(
     val centerFrequency1Mhz: Int,
     val channelWidthMhz: Int?,
     val securityCapabilities: String,
+    val securityTypes: List<String> = emptyList(),
     val wifiStandard: String?,
     val observedAtEpochMillis: Long,
     val ageMillis: Long,
@@ -121,6 +122,22 @@ data class WifiScanEntry(
     val band: WifiBand? get() = WifiBand.forFrequency(frequencyMhz)
     val channel: Int? get() = channelForFrequency(frequencyMhz)
     val signalQuality: SignalQuality get() = SignalQuality.forRssi(rssiDbm)
+    val wpsSupported: Boolean
+        get() = securityCapabilities.contains("[WPS]", ignoreCase = true)
+
+    val cipherSummary: String
+        get() = buildList {
+            if (securityCapabilities.contains("CCMP", true) ||
+                securityCapabilities.contains("AES", true)
+            ) add("AES/CCMP")
+            if (securityCapabilities.contains("TKIP", true)) add("TKIP")
+            if (securityCapabilities.contains("GCMP", true)) add("GCMP")
+        }.distinct().joinToString(" + ").ifBlank { "NOT DISCOVERED" }
+
+    val securitySummary: String
+        get() = securityTypes.joinToString(" + ").ifBlank {
+            securityCapabilities.ifBlank { "NOT DISCOVERED" }
+        }
 
     /** Lowest and highest frequency the AP occupies, for the overlap graph. */
     val occupiedRangeMhz: IntRange?

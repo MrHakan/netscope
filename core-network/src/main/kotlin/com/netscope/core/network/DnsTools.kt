@@ -26,7 +26,8 @@ import kotlin.coroutines.resume
  * TYPE_A and TYPE_AAAA, but rawQuery takes the numeric type directly.
  */
 enum class DnsRecordType(val code: Int) {
-    A(1), NS(2), CNAME(5), SOA(6), PTR(12), MX(15), TXT(16), AAAA(28), SRV(33);
+    A(1), NS(2), CNAME(5), SOA(6), PTR(12), MX(15), TXT(16), AAAA(28), SRV(33),
+    SVCB(64), HTTPS(65), SPF(99), CAA(257);
 }
 
 data class DnsAnswer(val type: DnsRecordType, val name: String, val value: String, val ttlSeconds: Long)
@@ -124,6 +125,7 @@ class DnsTools @Inject constructor(
         name: String,
         type: DnsRecordType,
         timeoutMillis: Long = 5_000,
+        recursionDesired: Boolean = true,
     ): DnsLookupResult {
         val start = System.nanoTime()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
@@ -134,7 +136,9 @@ class DnsTools @Inject constructor(
                     "Address lookups still work on this device.",
             )
         }
-        val raw = withTimeoutOrNull(timeoutMillis) { rawQuery(name, type) }
+        val raw = withTimeoutOrNull(timeoutMillis) {
+            if (recursionDesired) rawQuery(name, type) else rawUdpQuery(name, type, false)
+        }
         val duration = (System.nanoTime() - start) / 1_000_000
         if (raw == null) {
             return DnsLookupResult(
@@ -157,6 +161,59 @@ class DnsTools @Inject constructor(
             resolverNote = resolverNote(),
             error = if (parsed.isEmpty()) "No ${type.name} records were returned." else null,
         )
+    }
+
+    /**
+     * Direct DNS query used for +norec because DnsResolver does not expose the RD bit.
+     */
+    private suspend fun rawUdpQuery(
+        name: String,
+        type: DnsRecordType,
+        recursionDesired: Boolean,
+    ): ByteArray? = withContext(Dispatchers.IO) {
+        val manager = context.getSystemService(ConnectivityManager::class.java)
+        val resolver = runCatching {
+            manager?.activeNetwork
+                ?.let { manager.getLinkProperties(it) }
+                ?.dnsServers
+                ?.firstOrNull()
+        }.getOrNull() ?: return@withContext null
+
+        val query = buildDnsQuery(name, type, recursionDesired)
+        val socket = java.net.DatagramSocket().apply { soTimeout = 4_500 }
+        try {
+            socket.send(java.net.DatagramPacket(query, query.size, resolver, 53))
+            val packet = java.net.DatagramPacket(ByteArray(64 * 1024), 64 * 1024)
+            socket.receive(packet)
+            packet.data.copyOfRange(packet.offset, packet.offset + packet.length)
+        } catch (_: Exception) {
+            null
+        } finally {
+            socket.close()
+        }
+    }
+
+    private fun buildDnsQuery(
+        name: String,
+        type: DnsRecordType,
+        recursionDesired: Boolean,
+    ): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        output.write(byteArrayOf(0x4e, 0x53))
+        output.write(if (recursionDesired) 0x01 else 0x00)
+        output.write(0x00)
+        output.write(byteArrayOf(0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00))
+        name.trimEnd('.').split('.').forEach { label ->
+            val bytes = label.toByteArray(Charsets.UTF_8)
+            require(bytes.size in 1..63) { "DNS label is too long." }
+            output.write(bytes.size)
+            output.write(bytes)
+        }
+        output.write(0)
+        output.write((type.code shr 8) and 0xFF)
+        output.write(type.code and 0xFF)
+        output.write(byteArrayOf(0x00, 0x01))
+        return output.toByteArray()
     }
 
     private suspend fun rawQuery(name: String, type: DnsRecordType): ByteArray? =
@@ -285,23 +342,107 @@ internal object DnsResponseParser {
             }
         }
 
-        DnsRecordType.TXT -> {
-            // A TXT record is a sequence of length-prefixed strings.
-            val builder = StringBuilder()
-            var cursor = offset
-            val end = offset + length
-            while (cursor < end && cursor < data.size) {
-                val partLength = data[cursor].toInt() and 0xFF
-                cursor++
-                if (cursor + partLength > end || cursor + partLength > data.size) break
-                builder.append(String(data, cursor, partLength, Charsets.UTF_8))
-                cursor += partLength
+        DnsRecordType.TXT, DnsRecordType.SPF -> decodeCharacterStrings(data, offset, length)
+
+        DnsRecordType.CAA -> {
+            if (length < 3) null else {
+                val flags = data[offset].toInt() and 0xFF
+                val tagLength = data[offset + 1].toInt() and 0xFF
+                if (tagLength <= 0 || 2 + tagLength > length) null else {
+                    val tag = String(data, offset + 2, tagLength, Charsets.US_ASCII)
+                        .filter { !it.isISOControl() }
+                    val valueLength = length - 2 - tagLength
+                    val value = String(data, offset + 2 + tagLength, valueLength, Charsets.UTF_8)
+                        .filter { !it.isISOControl() }.take(512)
+                    flags.toString() + " " + tag + " " + value
+                }
             }
-            builder.toString().filter { !it.isISOControl() }.take(512).ifEmpty { null }
         }
+
+        DnsRecordType.SVCB, DnsRecordType.HTTPS -> decodeSvcb(data, offset, length)
 
         DnsRecordType.SOA -> readName(data, offset)?.first
     }
+
+    private fun decodeCharacterStrings(data: ByteArray, offset: Int, length: Int): String? {
+        val builder = StringBuilder()
+        var cursor = offset
+        val end = offset + length
+        while (cursor < end && cursor < data.size) {
+            val partLength = data[cursor].toInt() and 0xFF
+            cursor++
+            if (cursor + partLength > end || cursor + partLength > data.size) break
+            if (builder.isNotEmpty()) builder.append(" ")
+            builder.append(
+                String(data, cursor, partLength, Charsets.UTF_8)
+                    .filter { !it.isISOControl() },
+            )
+            cursor += partLength
+        }
+        return builder.toString().take(1024).ifEmpty { null }
+    }
+
+    private fun decodeSvcb(data: ByteArray, offset: Int, length: Int): String? {
+        if (length < 3 || offset + length > data.size) return null
+        val end = offset + length
+        val priority = readUnsignedShort(data, offset)
+        val target = readName(data, offset + 2) ?: return null
+        var cursor = target.second
+        val params = mutableListOf<String>()
+        while (cursor + 4 <= end && params.size < 24) {
+            val key = readUnsignedShort(data, cursor)
+            val valueLength = readUnsignedShort(data, cursor + 2)
+            cursor += 4
+            if (cursor + valueLength > end) break
+            val value = data.copyOfRange(cursor, cursor + valueLength)
+            val label = when (key) {
+                0 -> "mandatory"
+                1 -> "alpn"
+                2 -> "no-default-alpn"
+                3 -> "port"
+                4 -> "ipv4hint"
+                5 -> "ech"
+                6 -> "ipv6hint"
+                else -> "key" + key
+            }
+            val rendered = when (key) {
+                1 -> decodeAlpn(value)
+                3 -> if (value.size == 2) readUnsignedShort(value, 0).toString() else hex(value)
+                4 -> if (value.size % 4 == 0) value.asList().chunked(4).joinToString(",") { chunk ->
+                    chunk.joinToString(".") { (it.toInt() and 0xFF).toString() }
+                } else hex(value)
+                6 -> if (value.size % 16 == 0) value.asList().chunked(16).joinToString(",") { chunk ->
+                    runCatching { java.net.InetAddress.getByAddress(chunk.toByteArray()).hostAddress }.getOrNull()
+                        ?: hex(chunk.toByteArray())
+                } else hex(value)
+                else -> hex(value)
+            }
+            params += label + "=" + rendered
+            cursor += valueLength
+        }
+        return (
+            priority.toString() + " " + target.first +
+                if (params.isEmpty()) "" else " " + params.joinToString(" ")
+            ).take(1536)
+    }
+
+    private fun decodeAlpn(value: ByteArray): String {
+        val parts = mutableListOf<String>()
+        var cursor = 0
+        while (cursor < value.size && parts.size < 16) {
+            val size = value[cursor].toInt() and 0xFF
+            cursor++
+            if (size <= 0 || cursor + size > value.size) break
+            parts += String(value, cursor, size, Charsets.US_ASCII).filter { !it.isISOControl() }
+            cursor += size
+        }
+        return parts.joinToString(",")
+    }
+
+    private fun hex(value: ByteArray): String =
+        value.take(64).joinToString("") { "%02x".format(it.toInt() and 0xFF) } +
+            if (value.size > 64) "…" else ""
+
 
     /** Reads a possibly compressed name, returning the text and the offset after it. */
     private fun readName(data: ByteArray, start: Int): Pair<String, Int>? {

@@ -32,6 +32,7 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.jmdns)
+    implementation(libs.jsch)
 
     testImplementation(libs.junit)
     testImplementation(libs.truth)

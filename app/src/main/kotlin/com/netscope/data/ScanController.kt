@@ -24,6 +24,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -69,6 +70,8 @@ class ScanController @Inject constructor(
     private val permissionInspector: PermissionInspector,
     private val demoDataSource: DemoDataSource,
     private val ouiRepository: OuiRepository,
+    private val settingsRepository: SettingsRepository,
+    private val deviceAlertNotifier: DeviceAlertNotifier,
 ) {
 
     private val scope = CoroutineScope(SupervisorJob())
@@ -160,7 +163,13 @@ class ScanController @Inject constructor(
         val previouslySeen = profileId?.let {
             runCatching { historyRepository.knownDeviceKeys(it) }.getOrNull()
         }.orEmpty()
-        val previousDevices = emptyList<DiscoveredDevice>()
+        val previousDevices = profileId?.let { id ->
+            runCatching {
+                historyRepository.latestSessionIdForProfile(id)
+                    ?.let { historyRepository.devicesForSession(it) }
+                    .orEmpty()
+            }.getOrDefault(emptyList())
+        }.orEmpty()
 
         val storedLabels = profileId?.let {
             runCatching { historyRepository.labelsForProfile(it) }.getOrNull()
@@ -220,6 +229,18 @@ class ScanController @Inject constructor(
                 runCatching {
                     historyRepository.recordScan(profileId, metadata, enriched, network?.routes.orEmpty())
                 }
+            }
+
+            val newlySeen = if (previouslySeen.isEmpty()) {
+                emptyList()
+            } else {
+                enriched.filter { it.key !in previouslySeen }
+            }
+            val alertEnabled = runCatching {
+                settingsRepository.settings.first().newDeviceNotificationsEnabled
+            }.getOrDefault(false)
+            if (alertEnabled && newlySeen.isNotEmpty()) {
+                runCatching { deviceAlertNotifier.notifyNewDevices(newlySeen) }
             }
 
             _state.value = _state.value.copy(

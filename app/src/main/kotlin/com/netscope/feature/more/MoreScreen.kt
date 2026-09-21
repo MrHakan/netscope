@@ -24,6 +24,7 @@ fun MoreScreen(
     onOpenNetworks: () -> Unit,
     onOpenSubnets: () -> Unit,
     onOpenHistory: () -> Unit,
+    onOpenToolkit: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val entries = listOf(
@@ -41,6 +42,11 @@ fun MoreScreen(
             "History",
             "Stored scans and the network profiles they belong to.",
             onOpenHistory,
+        ),
+        MoreEntry(
+            "Advanced Toolkit",
+            "Speed test, RDAP/WHOIS, IP geolocation, Bonjour/UPnP, NetBIOS, LLMNR, SNMP, cellular info and manual inventory.",
+            onOpenToolkit,
         ),
         MoreEntry(
             "Settings",

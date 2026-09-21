@@ -24,60 +24,63 @@ private fun state(
 class WifiPermissionPolicyTest {
 
     @Test
-    fun `nearby wifi devices gates scanning from api 33`() {
+    fun `connected wifi identity uses nearby permission from api 33`() {
         assertThat(PermissionPolicy.wifiPermissionFor(state(sdkInt = 33)))
             .isEqualTo(NetScopePermissions.NEARBY_WIFI_DEVICES)
-        assertThat(PermissionPolicy.wifiPermissionFor(state(sdkInt = 36)))
-            .isEqualTo(NetScopePermissions.NEARBY_WIFI_DEVICES)
-    }
-
-    @Test
-    fun `location permission gates scanning below api 33`() {
         assertThat(PermissionPolicy.wifiPermissionFor(state(sdkInt = 32)))
             .isEqualTo(NetScopePermissions.ACCESS_FINE_LOCATION)
-        assertThat(PermissionPolicy.wifiPermissionFor(state(sdkInt = 26)))
-            .isEqualTo(NetScopePermissions.ACCESS_FINE_LOCATION)
     }
 
     @Test
-    fun `scanning is allowed once the right permission is granted`() {
-        val modern = state(sdkInt = 34, granted = setOf(NetScopePermissions.NEARBY_WIFI_DEVICES))
-        assertThat(PermissionPolicy.canScanAccessPoints(modern)).isTrue()
+    fun `access point scans require fine location on modern android too`() {
+        assertThat(PermissionPolicy.wifiScanPermissionsFor(state(sdkInt = 34)))
+            .containsExactly(
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+                NetScopePermissions.ACCESS_FINE_LOCATION,
+            )
+            .inOrder()
 
-        val legacy = state(sdkInt = 30, granted = setOf(NetScopePermissions.ACCESS_FINE_LOCATION))
-        assertThat(PermissionPolicy.canScanAccessPoints(legacy)).isTrue()
-    }
-
-    @Test
-    fun `the wrong permission does not unlock scanning`() {
-        // Granting the location permission on API 34 does nothing for scan results.
-        val wrong = state(sdkInt = 34, granted = setOf(NetScopePermissions.ACCESS_FINE_LOCATION))
-        val verdict = PermissionPolicy.verdict(CapabilityArea.ACCESS_POINT_SCAN, wrong)
+        val denied = state(
+            sdkInt = 34,
+            granted = setOf(
+                NetScopePermissions.NEARBY_WIFI_DEVICES,
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+            ),
+        )
+        val verdict = PermissionPolicy.verdict(CapabilityArea.ACCESS_POINT_SCAN, denied)
         assertThat(verdict).isInstanceOf(CapabilityVerdict.PermissionRequired::class.java)
         assertThat((verdict as CapabilityVerdict.PermissionRequired).permissions)
-            .containsExactly(NetScopePermissions.NEARBY_WIFI_DEVICES)
+            .containsExactly(NetScopePermissions.ACCESS_FINE_LOCATION)
     }
 
     @Test
-    fun `location services gate results only below api 33`() {
-        val legacy = state(
-            sdkInt = 32,
-            granted = setOf(NetScopePermissions.ACCESS_FINE_LOCATION),
+    fun `fine location unlocks nearby access point scan`() {
+        val granted = state(
+            sdkInt = 34,
+            granted = setOf(
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+                NetScopePermissions.ACCESS_FINE_LOCATION,
+            ),
+        )
+        assertThat(PermissionPolicy.canScanAccessPoints(granted)).isTrue()
+    }
+
+    @Test
+    fun `location services gate access point scans`() {
+        val state = state(
+            sdkInt = 34,
+            granted = setOf(
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+                NetScopePermissions.ACCESS_FINE_LOCATION,
+            ),
             locationServicesEnabled = false,
         )
-        assertThat(PermissionPolicy.verdict(CapabilityArea.ACCESS_POINT_SCAN, legacy))
+        assertThat(PermissionPolicy.verdict(CapabilityArea.ACCESS_POINT_SCAN, state))
             .isEqualTo(CapabilityVerdict.LocationServicesRequired)
-
-        val modern = state(
-            sdkInt = 33,
-            granted = setOf(NetScopePermissions.NEARBY_WIFI_DEVICES),
-            locationServicesEnabled = false,
-        )
-        assertThat(PermissionPolicy.canScanAccessPoints(modern)).isTrue()
     }
 
     @Test
-    fun `wifi being off outranks a permission problem`() {
+    fun `wifi being off outranks permission problems`() {
         val off = state(sdkInt = 34, wifiEnabled = false)
         assertThat(PermissionPolicy.verdict(CapabilityArea.ACCESS_POINT_SCAN, off))
             .isEqualTo(CapabilityVerdict.WifiDisabled)
@@ -86,12 +89,12 @@ class WifiPermissionPolicyTest {
     }
 
     @Test
-    fun `reading connected wifi details uses the same gate as scanning`() {
-        val granted = state(sdkInt = 34, granted = setOf(NetScopePermissions.NEARBY_WIFI_DEVICES))
+    fun `connected wifi details retain their own permission gate`() {
+        val granted = state(
+            sdkInt = 34,
+            granted = setOf(NetScopePermissions.NEARBY_WIFI_DEVICES),
+        )
         assertThat(PermissionPolicy.canReadWifiInfo(granted)).isTrue()
-
-        val denied = state(sdkInt = 34)
-        assertThat(PermissionPolicy.canReadWifiInfo(denied)).isFalse()
     }
 }
 
@@ -187,7 +190,11 @@ class LocalNetworkPermissionPolicyTest {
         val blocked = state(
             sdkInt = 37,
             targetSdkInt = 37,
-            granted = setOf(NetScopePermissions.NEARBY_WIFI_DEVICES),
+            granted = setOf(
+                NetScopePermissions.NEARBY_WIFI_DEVICES,
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+                NetScopePermissions.ACCESS_FINE_LOCATION,
+            ),
             platformDefined = definesPermission,
             declared = definesPermission,
         )

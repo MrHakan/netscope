@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.wifi.ScanResult
+import android.net.wifi.WifiInfo
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.SystemClock
@@ -54,7 +55,7 @@ class WifiInspector @Inject constructor(
      * rather than restated here.
      */
     fun requiredScanPermissions(): List<String> =
-        listOf(PermissionPolicy.wifiPermissionFor(permissionInspector.platformState()))
+        PermissionPolicy.wifiScanPermissionsFor(permissionInspector.platformState())
 
     private fun hasPermission(permission: String): Boolean = permissionInspector.isGranted(permission)
 
@@ -166,6 +167,11 @@ class WifiInspector @Inject constructor(
                 null
             },
             securityCapabilities = result.capabilities ?: "",
+            securityTypes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                result.securityTypes.map { securityTypeLabel(it) }.filterNotNull().distinct()
+            } else {
+                emptyList()
+            },
             wifiStandard = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                 wifiStandardLabel(result.wifiStandard)
             } else {
@@ -304,15 +310,21 @@ class WifiInspector @Inject constructor(
         }
 
     private fun securityTypeLabel(securityType: Int): String? = when (securityType) {
-        0 -> "Open"
-        1 -> "WEP"
-        2 -> "WPA-Personal"
-        3 -> "WPA2-Enterprise"
-        4 -> "WPA2/WPA3-Personal"
-        5 -> "WPA3-Enterprise"
-        6 -> "WPA3-Personal (SAE)"
-        7 -> "WPA3-Enterprise (192-bit)"
-        8 -> "OWE"
+        WifiInfo.SECURITY_TYPE_UNKNOWN -> null
+        WifiInfo.SECURITY_TYPE_OPEN -> "Open"
+        WifiInfo.SECURITY_TYPE_WEP -> "WEP"
+        WifiInfo.SECURITY_TYPE_PSK -> "WPA/WPA2 Personal (PSK)"
+        WifiInfo.SECURITY_TYPE_EAP -> "WPA/WPA2 Enterprise (EAP)"
+        WifiInfo.SECURITY_TYPE_SAE -> "WPA3 Personal (SAE)"
+        WifiInfo.SECURITY_TYPE_EAP_WPA3_ENTERPRISE_192_BIT -> "WPA3 Enterprise 192-bit"
+        WifiInfo.SECURITY_TYPE_OWE -> "Enhanced Open (OWE)"
+        WifiInfo.SECURITY_TYPE_WAPI_PSK -> "WAPI PSK"
+        WifiInfo.SECURITY_TYPE_WAPI_CERT -> "WAPI Certificate"
+        WifiInfo.SECURITY_TYPE_EAP_WPA3_ENTERPRISE -> "WPA3 Enterprise"
+        WifiInfo.SECURITY_TYPE_OSEN -> "OSEN"
+        WifiInfo.SECURITY_TYPE_PASSPOINT_R1_R2 -> "Passpoint R1/R2"
+        WifiInfo.SECURITY_TYPE_PASSPOINT_R3 -> "Passpoint R3"
+        WifiInfo.SECURITY_TYPE_DPP -> "Wi-Fi Easy Connect (DPP)"
         else -> null
     }
 
