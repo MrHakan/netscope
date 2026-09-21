@@ -29,6 +29,7 @@
       Android releases. NetScope requests this only for the user-visible Wi-Fi analyzer
       and never derives or stores physical position from scan results.
     -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <!--
