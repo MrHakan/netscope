@@ -32,8 +32,9 @@ data class HostMonitorTarget(
 /** Schedules Android-compliant periodic reachability checks. */
 @Singleton
 class HostMonitorScheduler @Inject constructor(
-    private val workManager: WorkManager,
+    @dagger.hilt.android.qualifiers.ApplicationContext context: Context,
 ) {
+    private val workManager = WorkManager.getInstance(context)
     fun schedule(target: HostMonitorTarget) {
         require(target.intervalMinutes >= 15) {
             "Background monitoring must be 15 minutes or slower on Android."
