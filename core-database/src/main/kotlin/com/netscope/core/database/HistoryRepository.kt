@@ -73,6 +73,9 @@ class HistoryRepository @Inject constructor(
     suspend fun knownDeviceKeys(profileId: Long): Set<String> =
         deviceDao.keysForProfile(profileId).toSet()
 
+    suspend fun latestSessionIdForProfile(profileId: Long): Long? =
+        sessionDao.latestForProfile(profileId)?.id
+
     /** Finds or creates the profile for a network snapshot. */
     suspend fun profileFor(snapshot: NetworkSnapshot, ssid: String?, bssid: String?): Long {
         val now = System.currentTimeMillis()
