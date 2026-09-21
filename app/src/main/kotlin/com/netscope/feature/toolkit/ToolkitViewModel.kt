@@ -19,6 +19,7 @@ import com.netscope.core.network.SpeedTestProgress
 import com.netscope.core.network.SpeedTestResult
 import com.netscope.core.network.SsdpDiscovery
 import com.netscope.core.network.SsdpRecord
+import com.netscope.data.HostMonitorScheduler
 import com.netscope.data.ToolkitPersistentState
 import com.netscope.data.ToolkitRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -42,6 +43,7 @@ enum class ToolkitSection(val label: String) {
     DISCOVERY("Bonjour / UPnP"),
     LEGACY("NetBIOS / LLMNR / SNMP"),
     CELLULAR("Cellular"),
+    MONITOR("Monitor"),
     INVENTORY("Inventory / Backup"),
 }
 
@@ -72,6 +74,11 @@ data class ToolkitUiState(
 
     val cellular: CellularSnapshot? = null,
 
+    val monitorLabel: String = "",
+    val monitorHost: String = "",
+    val monitorPort: String = "443",
+    val monitorIntervalMinutes: String = "15",
+
     val networkName: String = "",
     val networkCidr: String = "",
     val networkGateway: String = "",
@@ -90,6 +97,7 @@ class ToolkitViewModel @Inject constructor(
     private val ssdpDiscovery: SsdpDiscovery,
     private val networkInspector: NetworkInspector,
     private val toolkitRepository: ToolkitRepository,
+    private val hostMonitorScheduler: HostMonitorScheduler,
 ) : ViewModel() {
 
     private val transient = MutableStateFlow(ToolkitUiState())
@@ -111,6 +119,59 @@ class ToolkitViewModel @Inject constructor(
         cancel()
         transient.value = transient.value.copy(section = section, error = null, info = null)
         if (section == ToolkitSection.CELLULAR) refreshCellular()
+    }
+
+    fun setMonitorLabel(value: String) {
+        transient.value = transient.value.copy(monitorLabel = value.take(96), error = null)
+    }
+
+    fun setMonitorHost(value: String) {
+        transient.value = transient.value.copy(monitorHost = value.take(253), error = null)
+    }
+
+    fun setMonitorPort(value: String) {
+        transient.value = transient.value.copy(monitorPort = value.filter(Char::isDigit).take(5), error = null)
+    }
+
+    fun setMonitorInterval(value: String) {
+        transient.value = transient.value.copy(
+            monitorIntervalMinutes = value.filter(Char::isDigit).take(5),
+            error = null,
+        )
+    }
+
+    fun addMonitor() {
+        val current = transient.value
+        val host = current.monitorHost.trim()
+        val label = current.monitorLabel.trim().ifBlank { host }
+        val port = current.monitorPort.toIntOrNull()
+        val interval = current.monitorIntervalMinutes.toLongOrNull()
+        if (host.isBlank() || port == null || port !in 1..65535 || interval == null || interval < 15) {
+            transient.value = current.copy(
+                error = "Monitor requires a host, port 1-65535, and an interval of at least 15 minutes.",
+            )
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                toolkitRepository.addMonitor(label, host, port, interval)
+            }.onSuccess { target ->
+                hostMonitorScheduler.schedule(target)
+                transient.value = transient.value.copy(
+                    monitorLabel = "",
+                    monitorHost = "",
+                    info = "Monitor scheduled. Android may run periodic work inexactly.",
+                    error = null,
+                )
+            }.onFailure {
+                transient.value = transient.value.copy(error = it.message ?: "Monitor could not be scheduled.")
+            }
+        }
+    }
+
+    fun removeMonitor(id: String) {
+        hostMonitorScheduler.cancel(id)
+        viewModelScope.launch { toolkitRepository.removeMonitor(id) }
     }
 
     fun cancel() {
