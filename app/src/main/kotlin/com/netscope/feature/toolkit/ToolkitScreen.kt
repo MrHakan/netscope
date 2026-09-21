@@ -458,6 +458,18 @@ private fun CellularSection(state: ToolkitUiState, viewModel: ToolkitViewModel) 
                         cellular.signalDbm?.let { it.toString() + " dBm" } ?: "NOT DISCOVERED",
                     )
                     cellular.signalDetails.forEach { Text(it, style = MonoSmallTextStyle) }
+                    if (cellular.cellIdentities.isNotEmpty()) {
+                        Text(
+                            "Cell identities",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(top = 8.dp),
+                        )
+                        cellular.cellIdentities.forEach { identity ->
+                            Text(identity, style = MonoSmallTextStyle)
+                        }
+                    } else {
+                        PlainRow("Cell ID / LAC / TAC", "RESTRICTED OR NOT DISCOVERED")
+                    }
                     cellular.note?.let {
                         Text(
                             it,
