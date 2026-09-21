@@ -17,6 +17,7 @@ work = "2.10.0"
 coroutines = "1.9.0"
 serialization = "1.7.3"
 jmdns = "3.5.9"
+jsch = "2.28.7"
 junit = "4.13.2"
 truth = "1.4.4"
 androidxTestJunit = "1.2.1"
@@ -50,6 +51,7 @@ kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutine
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
 jmdns = { module = "org.jmdns:jmdns", version.ref = "jmdns" }
+jsch = { module = "com.github.mwiede:jsch", version.ref = "jsch" }
 junit = { module = "junit:junit", version.ref = "junit" }
 truth = { module = "com.google.truth:truth", version.ref = "truth" }
 androidx-test-junit = { module = "androidx.test.ext:junit", version.ref = "androidxTestJunit" }
