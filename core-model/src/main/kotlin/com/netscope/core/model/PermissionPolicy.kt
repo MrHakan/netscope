@@ -14,7 +14,7 @@ object ApiLevel {
     /** LocationManager.isLocationEnabled arrives. */
     const val LOCATION_ENABLED_API = 28
 
-    /** NEARBY_WIFI_DEVICES replaces the location permission for scan results. */
+    /** NEARBY_WIFI_DEVICES was introduced for nearby Wi-Fi connection APIs. */
     const val NEARBY_WIFI_DEVICES = 33
 
     /**
@@ -160,18 +160,21 @@ object PermissionPolicy {
     fun canUseSsdp(state: PlatformState): Boolean =
         verdict(CapabilityArea.SSDP, state).isAllowed
 
-    /**
-     * The permission that gates Wi-Fi identifiers and scan results on this release.
-     *
-     * NEARBY_WIFI_DEVICES took over from the location permission at API 33; below that
-     * the location permission is still what unlocks SSIDs, BSSIDs and scan results.
-     */
+    /** Permission used for connected Wi-Fi identity on this release. */
     fun wifiPermissionFor(state: PlatformState): String =
         if (state.sdkInt >= ApiLevel.NEARBY_WIFI_DEVICES) {
             NetScopePermissions.NEARBY_WIFI_DEVICES
         } else {
             NetScopePermissions.ACCESS_FINE_LOCATION
         }
+
+    /**
+     * WifiManager.startScan/getScanResults remain location-sensitive APIs.
+     * Android's current documentation still requires ACCESS_FINE_LOCATION even when
+     * the app targets API 33+, so this gate is intentionally separate from WIFI_INFO.
+     */
+    fun wifiScanPermissionsFor(state: PlatformState): List<String> =
+        listOf(NetScopePermissions.ACCESS_FINE_LOCATION)
 
     /**
      * The local network permission name this platform uses, or null if it has none.
@@ -218,18 +221,17 @@ object PermissionPolicy {
 
     private fun accessPointScanVerdict(state: PlatformState): CapabilityVerdict {
         if (!state.wifiEnabled) return CapabilityVerdict.WifiDisabled
-        val permission = wifiPermissionFor(state)
-        if (permission !in state.grantedPermissions) {
+        val permissions = wifiScanPermissionsFor(state)
+        val missing = permissions.filterNot { it in state.grantedPermissions }
+        if (missing.isNotEmpty()) {
             return CapabilityVerdict.PermissionRequired(
-                permissions = listOf(permission),
-                rationale = "Listing nearby access points requires $permission on this Android " +
-                    "version. Without it the platform returns an empty list, which is not the " +
-                    "same as there being no networks.",
+                permissions = missing,
+                rationale = "WifiManager.startScan/getScanResults require ACCESS_FINE_LOCATION " +
+                    "on current Android releases. NetScope uses it only to display nearby access " +
+                    "points; it does not calculate or store your physical position.",
             )
         }
-        // Below API 33 the location permission is the gate, and the platform additionally
-        // requires location services to be on system-wide before it returns any results.
-        if (state.sdkInt < ApiLevel.NEARBY_WIFI_DEVICES && !state.locationServicesEnabled) {
+        if (!state.locationServicesEnabled) {
             return CapabilityVerdict.LocationServicesRequired
         }
         return CapabilityVerdict.Allowed
