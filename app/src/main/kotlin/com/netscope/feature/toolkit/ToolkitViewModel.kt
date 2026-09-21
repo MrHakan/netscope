@@ -17,6 +17,9 @@ import com.netscope.core.network.RdapResult
 import com.netscope.core.network.SnmpSnapshot
 import com.netscope.core.network.SpeedTestProgress
 import com.netscope.core.network.SpeedTestResult
+import com.netscope.core.network.SshHostKeyInfo
+import com.netscope.core.network.SshReadOnlyMonitor
+import com.netscope.core.network.SshSystemSnapshot
 import com.netscope.core.network.SsdpDiscovery
 import com.netscope.core.network.SsdpRecord
 import com.netscope.data.HostMonitorScheduler
@@ -44,6 +47,7 @@ enum class ToolkitSection(val label: String) {
     LEGACY("NetBIOS / LLMNR / SNMP"),
     CELLULAR("Cellular"),
     MONITOR("Monitor"),
+    SSH("SSH Monitor"),
     INVENTORY("Inventory / Backup"),
 }
 
@@ -79,6 +83,13 @@ data class ToolkitUiState(
     val monitorPort: String = "443",
     val monitorIntervalMinutes: String = "15",
 
+    val sshHost: String = "",
+    val sshPort: String = "22",
+    val sshUsername: String = "",
+    val sshPassword: String = "",
+    val sshHostKey: SshHostKeyInfo? = null,
+    val sshSnapshot: SshSystemSnapshot? = null,
+
     val networkName: String = "",
     val networkCidr: String = "",
     val networkGateway: String = "",
@@ -98,6 +109,7 @@ class ToolkitViewModel @Inject constructor(
     private val networkInspector: NetworkInspector,
     private val toolkitRepository: ToolkitRepository,
     private val hostMonitorScheduler: HostMonitorScheduler,
+    private val sshMonitor: SshReadOnlyMonitor,
 ) : ViewModel() {
 
     private val transient = MutableStateFlow(ToolkitUiState())
@@ -117,8 +129,74 @@ class ToolkitViewModel @Inject constructor(
 
     fun select(section: ToolkitSection) {
         cancel()
-        transient.value = transient.value.copy(section = section, error = null, info = null)
+        transient.value = transient.value.copy(
+            section = section,
+            error = null,
+            info = null,
+            sshPassword = if (section == ToolkitSection.SSH) transient.value.sshPassword else "",
+        )
         if (section == ToolkitSection.CELLULAR) refreshCellular()
+    }
+
+    fun setSshHost(value: String) {
+        transient.value = transient.value.copy(
+            sshHost = value.take(253),
+            sshHostKey = null,
+            sshSnapshot = null,
+            error = null,
+        )
+    }
+
+    fun setSshPort(value: String) {
+        transient.value = transient.value.copy(
+            sshPort = value.filter(Char::isDigit).take(5),
+            sshHostKey = null,
+            sshSnapshot = null,
+            error = null,
+        )
+    }
+
+    fun setSshUsername(value: String) {
+        transient.value = transient.value.copy(sshUsername = value.take(128), error = null)
+    }
+
+    fun setSshPassword(value: String) {
+        transient.value = transient.value.copy(sshPassword = value.take(512), error = null)
+    }
+
+    fun scanSshHostKey() = launchTask {
+        val host = transient.value.sshHost.trim()
+        val port = transient.value.sshPort.toIntOrNull()
+        require(host.isNotEmpty()) { "Enter an SSH host." }
+        require(port != null && port in 1..65535) { "SSH port must be 1-65535." }
+        val key = sshMonitor.scanHostKey(host, port)
+        transient.value = transient.value.copy(
+            sshHostKey = key,
+            sshSnapshot = null,
+            info = "Verify this fingerprint against the server before trusting it.",
+        )
+    }
+
+    fun runSshSnapshot() = launchTask {
+        val current = transient.value
+        val host = current.sshHost.trim()
+        val port = current.sshPort.toIntOrNull()
+        val key = current.sshHostKey ?: error("Scan and review the SSH host key first.")
+        require(port != null && port in 1..65535) { "SSH port must be 1-65535." }
+        require(current.sshUsername.isNotBlank()) { "SSH username is required." }
+        require(current.sshPassword.isNotEmpty()) { "SSH password is required." }
+        val snapshot = sshMonitor.snapshot(
+            host = host,
+            port = port,
+            username = current.sshUsername,
+            password = current.sshPassword,
+            trustedHostKey = key,
+        )
+        transient.value = transient.value.copy(
+            sshSnapshot = snapshot,
+            sshPassword = "",
+            info = "Read-only SSH snapshot completed. Password cleared from memory.",
+        )
     }
 
     fun setMonitorLabel(value: String) {
