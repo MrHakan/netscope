@@ -54,7 +54,7 @@ class WifiInspector @Inject constructor(
      * rather than restated here.
      */
     fun requiredScanPermissions(): List<String> =
-        listOf(PermissionPolicy.wifiPermissionFor(permissionInspector.platformState()))
+        PermissionPolicy.wifiScanPermissionsFor(permissionInspector.platformState())
 
     private fun hasPermission(permission: String): Boolean = permissionInspector.isGranted(permission)
 
