@@ -1,7 +1,22 @@
 package com.netscope.core.network
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.os.Build
+import android.telephony.CellIdentityCdma
+import android.telephony.CellIdentityGsm
+import android.telephony.CellIdentityLte
+import android.telephony.CellIdentityNr
+import android.telephony.CellIdentityTdscdma
+import android.telephony.CellIdentityWcdma
+import android.telephony.CellInfo
+import android.telephony.CellInfoCdma
+import android.telephony.CellInfoGsm
+import android.telephony.CellInfoLte
+import android.telephony.CellInfoNr
+import android.telephony.CellInfoTdscdma
+import android.telephony.CellInfoWcdma
 import android.telephony.CellSignalStrength
 import android.telephony.TelephonyManager
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -20,6 +35,7 @@ data class CellularSnapshot(
     val signalLevel: Int?,
     val signalDbm: Int?,
     val signalDetails: List<String>,
+    val cellIdentities: List<String>,
     val note: String?,
 )
 
@@ -39,7 +55,7 @@ class CellularInspector @Inject constructor(
     @Suppress("DEPRECATION")
     fun snapshot(): CellularSnapshot {
         val manager = telephony ?: return CellularSnapshot(
-            false, null, null, null, null, null, null, null, null, null, emptyList(),
+            false, null, null, null, null, null, null, null, null, null, emptyList(), emptyList(),
             "This device does not expose TelephonyManager.",
         )
 
@@ -53,6 +69,18 @@ class CellularInspector @Inject constructor(
 
         val type = runCatching { manager.dataNetworkType }.getOrNull()
             ?: runCatching { manager.networkType }.getOrNull()
+
+        val canReadCellIdentity =
+            context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+                PackageManager.PERMISSION_GRANTED
+        val cellIdentities = if (canReadCellIdentity) {
+            runCatching { manager.allCellInfo.orEmpty() }
+                .getOrDefault(emptyList())
+                .take(16)
+                .mapNotNull(::cellIdentitySummary)
+        } else {
+            emptyList()
+        }
 
         return CellularSnapshot(
             available = true,
@@ -74,10 +102,98 @@ class CellularInspector @Inject constructor(
                 name + ": " + (dbm?.let { it.toString() + " dBm" } ?: "unknown") +
                     (asu?.let { ", ASU " + it } ?: "")
             },
-            note = "Cell ID/LAC/TAC are not read without additional Android phone/location " +
-                "permissions. Signal strength may be a cached modem value.",
+            cellIdentities = cellIdentities,
+            note = if (canReadCellIdentity) {
+                "Cell identity is the latest cached radio information Android exposed. " +
+                    "Unavailable modem fields remain omitted."
+            } else {
+                "CID/LAC/TAC/CI/NCI require the optional precise-location permission. " +
+                    "NetScope does not infer them when Android withholds them."
+            },
         )
     }
+
+    private fun cellIdentitySummary(info: CellInfo): String? {
+        val registered = if (info.isRegistered) "serving" else "neighbor"
+        return when (info) {
+            is CellInfoGsm -> {
+                val id: CellIdentityGsm = info.cellIdentity
+                parts(
+                    "GSM", registered,
+                    value("CID", id.cid),
+                    value("LAC", id.lac),
+                    value("ARFCN", id.arfcn),
+                    plmn(id.mccString, id.mncString),
+                )
+            }
+            is CellInfoWcdma -> {
+                val id: CellIdentityWcdma = info.cellIdentity
+                parts(
+                    "WCDMA", registered,
+                    value("CID", id.cid),
+                    value("LAC", id.lac),
+                    value("PSC", id.psc),
+                    value("UARFCN", id.uarfcn),
+                    plmn(id.mccString, id.mncString),
+                )
+            }
+            is CellInfoLte -> {
+                val id: CellIdentityLte = info.cellIdentity
+                parts(
+                    "LTE", registered,
+                    value("CI", id.ci),
+                    value("TAC", id.tac),
+                    value("PCI", id.pci),
+                    value("EARFCN", id.earfcn),
+                    plmn(id.mccString, id.mncString),
+                )
+            }
+            is CellInfoNr -> {
+                val id = info.cellIdentity as? CellIdentityNr ?: return null
+                parts(
+                    "NR", registered,
+                    longValue("NCI", id.nci),
+                    value("TAC", id.tac),
+                    value("PCI", id.pci),
+                    value("NRARFCN", id.nrarfcn),
+                    plmn(id.mccString, id.mncString),
+                )
+            }
+            is CellInfoTdscdma -> {
+                val id: CellIdentityTdscdma = info.cellIdentity
+                parts(
+                    "TD-SCDMA", registered,
+                    value("CID", id.cid),
+                    value("LAC", id.lac),
+                    value("CPID", id.cpid),
+                    value("UARFCN", id.uarfcn),
+                    plmn(id.mccString, id.mncString),
+                )
+            }
+            is CellInfoCdma -> {
+                val id: CellIdentityCdma = info.cellIdentity
+                parts(
+                    "CDMA", registered,
+                    value("BID", id.basestationId),
+                    value("NID", id.networkId),
+                    value("SID", id.systemId),
+                )
+            }
+            else -> null
+        }
+    }
+
+    private fun value(label: String, value: Int): String? =
+        value.takeUnless { it == Int.MAX_VALUE || it < 0 }?.let { label + "=" + it }
+
+    private fun longValue(label: String, value: Long): String? =
+        value.takeUnless { it == Long.MAX_VALUE || it < 0L }?.let { label + "=" + it }
+
+    private fun plmn(mcc: String?, mnc: String?): String? =
+        if (!mcc.isNullOrBlank() && !mnc.isNullOrBlank()) "PLMN=" + mcc + "-" + mnc else null
+
+    private fun parts(vararg values: String?): String =
+        values.filterNotNull().joinToString(" · ")
 
     private fun networkTypeLabel(type: Int): String = when (type) {
         TelephonyManager.NETWORK_TYPE_GPRS -> "GPRS (2G)"
