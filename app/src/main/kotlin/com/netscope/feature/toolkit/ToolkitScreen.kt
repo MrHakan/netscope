@@ -79,8 +79,8 @@ fun ToolkitScreen(
                 }
             }
 
-            state.error?.let { item { NoticeBanner(it, NoticeTone.ERROR) } }
-            state.info?.let { item { NoticeBanner(it, NoticeTone.INFO) } }
+            state.error?.let { item { NoticeBanner(it, tone = NoticeTone.ERROR) } }
+            state.info?.let { item { NoticeBanner(it, tone = NoticeTone.INFO) } }
 
             item {
                 when (state.section) {
@@ -440,7 +440,7 @@ private fun CellularSection(state: ToolkitUiState, viewModel: ToolkitViewModel) 
                     modifier = Modifier.padding(top = 8.dp),
                 )
             } else if (!cellular.available) {
-                NoticeBanner(cellular.note ?: "Cellular telephony is unavailable.", NoticeTone.INFO)
+                NoticeBanner(cellular.note ?: "Cellular telephony is unavailable.", tone = NoticeTone.INFO)
             } else {
                 Column(modifier = Modifier.padding(top = 8.dp)) {
                     PlainRow("Operator", cellular.operatorName ?: "NOT DISCOVERED")
