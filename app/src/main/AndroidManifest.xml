@@ -25,12 +25,11 @@
         tools:targetApi="tiramisu" />
 
     <!--
-      Below API 33 the platform gates SSIDs, BSSIDs and scan results behind the location
-      permission. It is capped at 32 so newer devices never ask for it.
+      WifiManager.startScan/getScanResults remain location-sensitive APIs on current
+      Android releases. NetScope requests this only for the user-visible Wi-Fi analyzer
+      and never derives or stores physical position from scan results.
     -->
-    <uses-permission
-        android:name="android.permission.ACCESS_FINE_LOCATION"
-        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <!--
       Local network access. Newer releases require an explicit grant before an app may
