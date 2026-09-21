@@ -2,11 +2,13 @@ package com.netscope.feature.wifi
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.netscope.core.model.MacAddress
 import com.netscope.core.model.WifiBand
 import com.netscope.core.model.WifiConnectionInfo
 import com.netscope.core.model.WifiScanAvailability
 import com.netscope.core.model.WifiScanEntry
 import com.netscope.core.network.WifiInspector
+import com.netscope.data.OuiRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -29,6 +31,7 @@ data class WifiUiState(
     val selectedBand: WifiBand? = null,
     val liveSignalActive: Boolean = false,
     val samples: List<SignalSample> = emptyList(),
+    val vendors: Map<String, String> = emptyMap(),
 ) {
     val visibleNetworks: List<WifiScanEntry>
         get() = if (selectedBand == null) networks else networks.filter { it.band == selectedBand }
@@ -41,18 +44,20 @@ data class WifiUiState(
 @HiltViewModel
 class WifiViewModel @Inject constructor(
     private val wifiInspector: WifiInspector,
+    private val ouiRepository: OuiRepository,
 ) : ViewModel() {
 
     private val refreshTick = MutableStateFlow(0)
     private val selectedBand = MutableStateFlow<WifiBand?>(null)
     private val liveSignalActive = MutableStateFlow(false)
     private val samples = MutableStateFlow<List<SignalSample>>(emptyList())
+    private val vendors = MutableStateFlow<Map<String, String>>(emptyMap())
     private var liveSignalJob: Job? = null
 
     private val networks: StateFlow<List<WifiScanEntry>> = wifiInspector.observeScanResults()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val uiState: StateFlow<WifiUiState> = combine(
+    private val baseState = combine(
         networks,
         refreshTick,
         selectedBand,
@@ -67,7 +72,25 @@ class WifiViewModel @Inject constructor(
             liveSignalActive = live,
             samples = sampleList,
         )
+    }
+
+    val uiState: StateFlow<WifiUiState> = combine(baseState, vendors) { base, vendorMap ->
+        base.copy(vendors = vendorMap)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WifiUiState())
+
+    init {
+        viewModelScope.launch {
+            networks.collect { results ->
+                val lookup = ouiRepository.lookup()
+                val now = System.currentTimeMillis()
+                vendors.value = results.mapNotNull { entry ->
+                    val mac = MacAddress.parse(entry.bssid) ?: return@mapNotNull null
+                    val vendor = lookup.vendorFor(mac, now).value ?: return@mapNotNull null
+                    entry.bssid to vendor
+                }.toMap()
+            }
+        }
+    }
 
     /**
      * Asks Android for a fresh scan.
