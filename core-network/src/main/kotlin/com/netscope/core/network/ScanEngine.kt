@@ -19,7 +19,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -29,6 +32,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.util.concurrent.atomic.AtomicInteger
@@ -98,14 +102,16 @@ class ScanEngine @Inject constructor(
         peakConcurrency.set(0)
         inFlight.set(0)
 
-        val addresses = orderAddresses(target, profile, localAddress, gateway, previouslySeen)
+        val totalAddresses = plannedAddressCount(
+            target, profile, localAddress, gateway, previouslySeen,
+        )
         val devices = java.util.concurrent.ConcurrentHashMap<String, DiscoveredDevice>()
 
         _progress.value = ScanProgress(
             phase = ScanPhase.HOST_DISCOVERY,
             target = target.toString(),
             probed = 0,
-            total = addresses.size,
+            total = totalAddresses,
             found = 0,
             isRunning = true,
             startedAtEpochMillis = startedAt,
@@ -124,13 +130,30 @@ class ScanEngine @Inject constructor(
             }
         }
 
-        val semaphore = Semaphore(performanceProfile.maxConcurrency)
         val probed = AtomicInteger(0)
+        val workerCount = performanceProfile.maxConcurrency.coerceAtLeast(1)
+        val queue = Channel<Ipv4Address>(capacity = workerCount * 2)
 
-        val probeJobs = addresses.map { address ->
-            async(Dispatchers.IO) {
-                semaphore.withPermit {
-                    ensureActive()
+        // A bounded producer/worker pipeline keeps memory proportional to concurrency.
+        // Even a /8 therefore creates at most maxConcurrency workers rather than one
+        // coroutine per host and never materialises the whole CIDR in memory.
+        val producer = launch(Dispatchers.Default) {
+            try {
+                for (address in addressSequence(
+                    target, profile, localAddress, gateway, previouslySeen,
+                )) {
+                    coroutineContext.ensureActive()
+                    queue.send(address)
+                }
+            } finally {
+                queue.close()
+            }
+        }
+
+        val workers = List(workerCount) {
+            launch(Dispatchers.IO) {
+                for (address in queue) {
+                    coroutineContext.ensureActive()
                     trackConcurrency {
                         probeAddress(
                             address = address,
@@ -142,16 +165,17 @@ class ScanEngine @Inject constructor(
                             devices = devices,
                         )
                     }
+                    val done = probed.incrementAndGet()
+                    _progress.value = _progress.value.copy(
+                        probed = done,
+                        found = devices.size,
+                    )
                 }
-                val done = probed.incrementAndGet()
-                _progress.value = _progress.value.copy(
-                    probed = done,
-                    found = devices.size,
-                )
             }
         }
 
-        probeJobs.awaitAll()
+        producer.join()
+        workers.joinAll()
         discoveryJob.await()
 
         // Name resolution runs after discovery so it only touches hosts that exist.
@@ -380,42 +404,84 @@ class ScanEngine @Inject constructor(
      * device, previously seen hosts and the low addresses DHCP pools usually start at —
      * so the list is useful long before the sweep finishes.
      */
+    /**
+     * Lazy probe order. No CIDR is materialised into a List.
+     *
+     * QUICK emits only explicitly useful addresses. SMART emits priority addresses first
+     * and then streams the remaining hosts exactly once. FULL/CUSTOM stream in CIDR order.
+     */
+    internal fun addressSequence(
+        target: Ipv4Cidr,
+        profile: ScanProfile,
+        localAddress: Ipv4Address?,
+        gateway: Ipv4Address?,
+        previouslySeen: Set<String>,
+    ): Sequence<Ipv4Address> {
+        fun prioritySet(includeDhcpHead: Boolean): LinkedHashSet<Ipv4Address> {
+            val priority = LinkedHashSet<Ipv4Address>()
+            gateway?.takeIf { it in target }?.let(priority::add)
+            localAddress?.takeIf { it in target }?.let(priority::add)
+            for (key in previouslySeen) {
+                Ipv4Address.parse(key)?.takeIf { it in target }?.let(priority::add)
+            }
+            if (includeDhcpHead) {
+                target.hostAddresses().take(DHCP_HEAD_COUNT).forEach(priority::add)
+            }
+            return priority
+        }
+
+        return when (profile) {
+            ScanProfile.FULL, ScanProfile.CUSTOM -> target.hostAddresses()
+
+            ScanProfile.QUICK -> prioritySet(includeDhcpHead = false).asSequence()
+
+            ScanProfile.SMART -> {
+                val priority = prioritySet(includeDhcpHead = true)
+                sequence {
+                    yieldAll(priority)
+                    for (address in target.hostAddresses()) {
+                        if (address !in priority) yield(address)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Compatibility helper retained for small-range tests/debugging.
+     * Production scanning uses [addressSequence] directly.
+     */
     internal fun orderAddresses(
         target: Ipv4Cidr,
         profile: ScanProfile,
         localAddress: Ipv4Address?,
         gateway: Ipv4Address?,
         previouslySeen: Set<String>,
-    ): List<Ipv4Address> {
-        val all = target.hostAddresses().toList()
-        return when (profile) {
-            ScanProfile.FULL, ScanProfile.CUSTOM -> all
+    ): List<Ipv4Address> =
+        addressSequence(target, profile, localAddress, gateway, previouslySeen).toList()
 
-            ScanProfile.QUICK -> all.filter { address ->
-                address == gateway || address == localAddress ||
-                    address.toCanonicalString() in previouslySeen
-            }
-
-            ScanProfile.SMART -> {
-                val priority = LinkedHashSet<Ipv4Address>()
-                gateway?.takeIf { it in target }?.let(priority::add)
-                localAddress?.takeIf { it in target }?.let(priority::add)
-                all.filter { it.toCanonicalString() in previouslySeen }.forEach(priority::add)
-                // DHCP pools overwhelmingly start low in the block.
-                all.take(DHCP_HEAD_COUNT).forEach(priority::add)
-                (priority + all.filterNot { it in priority }).toList()
-            }
-        }
-    }
-
-    /** Total addresses a scan of [target] would probe under [profile]. */
+    /** Total addresses without enumerating the target range. */
     fun plannedAddressCount(
         target: Ipv4Cidr,
         profile: ScanProfile,
         localAddress: Ipv4Address?,
         gateway: Ipv4Address?,
         previouslySeen: Set<String>,
-    ): Int = orderAddresses(target, profile, localAddress, gateway, previouslySeen).size
+    ): Int {
+        val count = when (profile) {
+            ScanProfile.FULL, ScanProfile.CUSTOM, ScanProfile.SMART -> target.usableHostCount
+            ScanProfile.QUICK -> {
+                val values = LinkedHashSet<Long>()
+                gateway?.takeIf { it in target }?.let { values += it.value }
+                localAddress?.takeIf { it in target }?.let { values += it.value }
+                for (key in previouslySeen) {
+                    Ipv4Address.parse(key)?.takeIf { it in target }?.let { values += it.value }
+                }
+                values.size.toLong()
+            }
+        }
+        return count.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+    }
 
     fun markCancelled() {
         _progress.value = _progress.value.copy(
