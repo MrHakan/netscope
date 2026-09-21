@@ -192,6 +192,7 @@ class LocalNetworkPermissionPolicyTest {
             targetSdkInt = 37,
             granted = setOf(
                 NetScopePermissions.NEARBY_WIFI_DEVICES,
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
                 NetScopePermissions.ACCESS_FINE_LOCATION,
             ),
             platformDefined = definesPermission,
