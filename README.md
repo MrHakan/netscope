@@ -7,9 +7,10 @@ information — it shows where every value came from, marks what it inferred, an
 what Android refuses to reveal. A blank is never shown where a guess would do, and a
 guess is never shown where an observation is expected.
 
-> **Status: milestone M1.** The scanning engine, evidence model, Wi-Fi analyzer,
-> toolbox, subnet analyzer and history are implemented and working. Section
-> "Not implemented" below lists exactly what is not.
+> **Status: advanced diagnostics milestone.** The scanning engine, evidence model,
+> Wi-Fi analyzer, routed-subnet Service Explorer, Advanced Toolkit, monitoring,
+> history, manual inventory and backup/restore are implemented. Section
+> "Platform / scope limits" below lists the remaining deliberate limits.
 
 ---
 
@@ -84,15 +85,17 @@ available; the error message says so explicitly.
 
 ### Host monitoring intervals
 
-`MonitorSchedulingPolicy` encodes what Android actually permits rather than passing a
-user-chosen interval to WorkManager and hoping:
+The built-in background monitor follows Android's WorkManager rules:
 
-| Requested interval | Mechanism |
+| Requested interval | NetScope behavior |
 |---|---|
 | 15 minutes or longer | WorkManager periodic work — deferred and **inexact**; the UI says "about every N minutes" |
-| Under 15 minutes | A foreground monitoring session the user starts while the app is visible, with a persistent notification |
-| Under 15 minutes, started from the background on Android 12+ | Rejected with an explanation — a foreground service cannot be started from the background there |
-| Under 5 seconds | Rejected — no extra information, significant battery cost |
+| Under 15 minutes | Rejected for background monitoring instead of pretending WorkManager can honor it |
+
+Each check is bounded. `CONNECTED`, `REFUSED/CLOSED_BUT_HOST_RESPONDED`,
+`TIMEOUT/NO RESPONSE` and `NO ROUTE` remain distinct so a closed port is never
+presented as an open service.
+
 
 ---
 
@@ -106,13 +109,14 @@ core-network      Android — ConnectivityManager, ICMP/TCP probes, scan engine,
 core-database     Room — profiles, sessions, devices, observations, services, routes
 core-ui           Material 3 dark-first theme and the evidence-rendering composables
 app               feature packages: dashboard, devices, wifi, tools, subnets,
-                  networks, history, settings
+                  networks, history, toolkit, access, settings
 ```
 
 `core-model` is a **pure JVM module** with no Android dependencies, so all subnet, CIDR,
 permission and reasoning logic is unit-testable without Robolectric, an emulator or a
-LAN. That is where the 123 unit tests live — including the permission matrix for every
-API level from 26 to 37 and the topology derivation.
+LAN. That is where the pure policy/maths unit tests live — including the permission matrix
+for API 26 through 37 and the topology derivation. Android-facing modules add their own
+tests for protocol parsing and scanner behavior.
 
 **Deviation from the specification:** the spec lists eleven separate `feature-*` Gradle
 modules. They are implemented as packages inside `app` instead. The four `core-*`
@@ -156,6 +160,39 @@ warns that FTP itself is unencrypted and recommends SFTP/FTPS where available.
 The subnet service scan is deliberately capped at 4096 hosts per run and feeds work
 through a bounded Channel instead of allocating one coroutine per host/port.
 
+## Advanced Toolkit
+
+The **More → Advanced Toolkit** screen brings the main Network Analyzer Pro / NetX-style
+diagnostics into one place while keeping NetScope's evidence and Android-limit rules:
+
+- **Internet speed test** — real bounded HTTP download/upload throughput against
+  `speed.cloudflare.com`, latency/jitter, and local speed-test history.
+- **RDAP / WHOIS, ASN and public-IP geolocation** — IP, domain and AS lookups through
+  RDAP plus explicit public geolocation and current public-network metadata.
+- **Advanced DNS** — A/AAAA/PTR/MX/NS/SOA/TXT/SRV plus SPF, CAA, SVCB and HTTPS records,
+  with an explicit `+norec` mode.
+- **Bonjour / mDNS and UPnP / SSDP browser** — browse local advertised services without
+  first running a full subnet sweep.
+- **NetBIOS Node Status and LLMNR** — compatibility discovery for older Windows/LAN
+  environments.
+- **Read-only SNMP v2c** — user-supplied community string; only `GET` for
+  `sysName`, `sysDescr` and `sysUpTime`. No community guessing and no `SET`.
+- **Cellular snapshot** — operator, MCC/MNC, radio generation, signal and, when Android
+  grants precise-location access, cached CID/LAC/TAC/CI/NCI identity fields.
+- **Host monitor** — Android-compliant WorkManager checks at 15 minutes or slower and
+  notifies only when state changes. TCP refusal is kept separate from an open port.
+- **Read-only SSH system monitor** — fetches the host-key fingerprint before credentials,
+  then runs only fixed OS/uptime/load/RAM/disk commands after explicit trust. Passwords
+  remain in memory and are cleared after the run.
+- **Manual inventory, favorites and JSON backup/restore** — user-created networks/devices
+  are stored separately from observed scan evidence so imported data cannot masquerade
+  as a network observation.
+
+Wi-Fi analysis also reports Android security types (including WPA3/OWE/DPP/Passpoint
+where exposed), cipher hints, WPS advertisement, channel width, generation and offline
+OUI manufacturer matches. Nearby-AP scan permission is intentionally separate from
+connected-Wi-Fi identity because Android gates the two operations differently.
+
 ## Export
 
 Results export to JSON or CSV from the Devices screen. Every exported property carries
@@ -183,8 +220,9 @@ recorded scan shows "not scanned yet" rather than a zero.
 Phases: network enumeration → route analysis → host discovery → name resolution →
 service discovery → fingerprinting → comparison with history.
 
-- **Bounded concurrency.** A `Semaphore` sized from the performance profile (8/32/64),
-  never one coroutine per host.
+- **Bounded concurrency.** A fixed worker pool sized from the performance profile
+  (8/32/64) consumes a bounded `Channel`; the CIDR stays lazy and NetScope never
+  creates one coroutine per host.
 - **Incremental results.** Devices stream to the UI over a `Flow` as they are found.
 - **Instant STOP.** The scan runs in a scope the controller owns; cancelling it
   propagates through structured concurrency and releases every socket and the multicast
@@ -218,9 +256,11 @@ No account, no cloud service, no analytics SDK. Scan results, SSIDs, BSSIDs, hos
 and device inventories stay on the device and are excluded from cloud backup and device
 transfer.
 
-Exactly one feature contacts anything outside the local network — the public IP lookup.
-It is off by default, requires an explicit tap, and names the endpoint
-(`https://api.ipify.org`) in the UI before the request is made.
+Public internet tools are **user initiated** and identify their endpoint in the UI.
+The speed test and current public-network metadata use `speed.cloudflare.com`;
+RDAP/WHOIS bootstrap lookups use `rdap.org`; public IP geolocation uses `ipwho.is`.
+LAN scanning, Wi-Fi analysis, history, manual inventory and backups stay local.
+No analytics SDK or account is used.
 
 ---
 
@@ -229,7 +269,7 @@ It is off by default, requires an explicit tap, and names the endpoint
 Requires JDK 17+ and the Android SDK (compileSdk 35).
 
 ```bash
-./gradlew test              # 79 unit tests, no device or LAN needed
+./gradlew test              # JVM/Android unit tests; no physical LAN is required
 ./gradlew :app:assembleDebug
 ./gradlew :app:assembleRelease
 ```
@@ -260,30 +300,27 @@ the literal.
 
 ---
 
-## Not implemented
+## Platform / scope limits
 
-Stated plainly rather than stubbed:
+These are deliberate limits rather than hidden stubs:
 
-- **Intermediate traceroute hops** — not possible without the socket error queue or root.
-  Hop distance is measured instead, and the UI explains why.
-- **iPerf** — would require shipping a native library in `jniLibs` and reproducing its
-  licence notice. Not bundled.
-- **Speed test** — deliberately omitted rather than shipped as a PHY-link-speed reading
-  dressed up as throughput.
-- **NetBIOS and LLMNR discovery** — the evidence sources are modelled but no prober is
-  wired up yet; mDNS and SSDP cover the same ground on modern networks.
-- **Root and managed-device modes** — detected and reported as capability levels, but no
-  elevated operations are implemented. Nothing in the app requires root.
-- **Router/controller integrations** (UniFi, OpenWrt, MikroTik, SNMP) — M3.
-- **WorkManager host monitor and new-device notifications** — M2. The scheduling rules
-  for the monitor are implemented and tested in `MonitorSchedulingPolicy`; the monitor
-  itself is not built yet. The notification preference exists but currently gates nothing,
-  and the WorkManager dependency was removed so the app does not request `WAKE_LOCK`,
-  `RECEIVE_BOOT_COMPLETED` or `FOREGROUND_SERVICE` for a feature it does not have.
-- **Tablet list-detail layouts** — the layouts are responsive but do not yet use a
-  two-pane list-detail presentation.
-- **OUI database** ships as a curated ~234-entry subset, not the full IEEE registry. An
-  unlisted prefix reports `NOT DISCOVERED`.
+- **Intermediate traceroute hop addresses** — Android third-party apps do not expose the
+  socket error queue/raw-socket capability required for a conventional hop table.
+  NetScope measures hop distance and explains the limitation instead of fabricating hops.
+- **iPerf protocol compatibility** — NetScope now has a real HTTP throughput test, but it
+  does not bundle an iPerf native binary/library. Doing so would add native packaging and
+  licence/maintenance obligations for a feature the current speed test already covers.
+- **Root / device-owner packet capture or firewall control** — capability is detected,
+  but normal NetScope diagnostics do not require elevated privileges.
+- **Router-vendor controller APIs** — there is no automatic UniFi/OpenWrt/MikroTik
+  credential integration. Generic SNMP read-only monitoring and verified read-only SSH
+  system monitoring are available instead.
+- **Remote destructive administration** — no password guessing, exploit probing,
+  arbitrary remote shell, shutdown/reboot automation, SNMP SET, delete or configuration
+  mutation is performed.
+- **Tablet two-pane presentation** — layouts are responsive but remain single-pane.
+- **OUI coverage** — the bundled OUI table is curated rather than the full IEEE registry;
+  unknown prefixes remain `NOT DISCOVERED`.
 
 ## Licence
 
