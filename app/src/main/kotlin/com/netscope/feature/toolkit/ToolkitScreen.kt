@@ -127,7 +127,7 @@ private fun SpeedSection(state: ToolkitUiState, viewModel: ToolkitViewModel) {
             NoticeBanner(
                 "User initiated only. The test downloads about 10 MB and uploads about 5 MB. " +
                     "The PHY link speed shown elsewhere in NetScope is not used as a substitute.",
-                NoticeTone.INFO,
+                tone = NoticeTone.INFO,
             )
             BusyButton(state.busy, "Run speed test", viewModel::runSpeedTest, viewModel::cancel)
 
@@ -188,7 +188,7 @@ private fun LookupSection(state: ToolkitUiState, viewModel: ToolkitViewModel) {
             NoticeBanner(
                 "RDAP queries use rdap.org. IP geolocation uses ipwho.is. Current public IP/ASN " +
                     "metadata uses speed.cloudflare.com/meta. These are explicit public lookups.",
-                NoticeTone.INFO,
+                tone = NoticeTone.INFO,
             )
             OutlinedTextField(
                 value = state.lookupTarget,
@@ -361,7 +361,7 @@ private fun LegacySection(state: ToolkitUiState, viewModel: ToolkitViewModel) {
             NoticeBanner(
                 "SNMP only performs GET for sysName, sysDescr and sysUpTime. It never sends SET " +
                     "and never tries community strings automatically.",
-                NoticeTone.INFO,
+                tone = NoticeTone.INFO,
             )
             OutlinedTextField(
                 value = state.legacyTarget,
@@ -482,7 +482,7 @@ private fun MonitorSection(state: ToolkitUiState, viewModel: ToolkitViewModel) {
                 "Android WorkManager has a 15-minute minimum periodic interval and is inexact. " +
                     "A refused TCP connection still proves the host responded; NetScope keeps it " +
                     "separate from an open port.",
-                NoticeTone.INFO,
+                tone = NoticeTone.INFO,
             )
             OutlinedTextField(
                 value = state.monitorLabel,
