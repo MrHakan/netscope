@@ -37,6 +37,7 @@ data class ToolkitPersistentState(
     val manualNetworks: List<ManualNetwork> = emptyList(),
     val manualDevices: List<ManualDevice> = emptyList(),
     val favoriteTargets: List<String> = emptyList(),
+    val monitors: List<HostMonitorTarget> = emptyList(),
 )
 
 /**
@@ -103,6 +104,29 @@ class ToolkitRepository @Inject constructor(
         current.copy(favoriteTargets = values.distinct().take(MAX_FAVORITES))
     }
 
+    suspend fun addMonitor(
+        label: String,
+        host: String,
+        port: Int,
+        intervalMinutes: Long,
+    ): HostMonitorTarget {
+        val target = HostMonitorTarget(
+            id = UUID.randomUUID().toString(),
+            label = clean(label, 96),
+            host = clean(host, 253),
+            port = port,
+            intervalMinutes = intervalMinutes,
+        )
+        mutate { current ->
+            current.copy(monitors = (current.monitors + target).take(MAX_MONITORS))
+        }
+        return target
+    }
+
+    suspend fun removeMonitor(id: String) = mutate { current ->
+        current.copy(monitors = current.monitors.filterNot { it.id == id })
+    }
+
     suspend fun exportBackup(): String {
         val current = state.first()
         return JSONObject()
@@ -141,6 +165,16 @@ class ToolkitRepository @Inject constructor(
                 }
             })
             .put("favoriteTargets", JSONArray(current.favoriteTargets))
+            .put("monitors", JSONArray().apply {
+                current.monitors.forEach { target ->
+                    put(JSONObject()
+                        .put("id", target.id)
+                        .put("label", target.label)
+                        .put("host", target.host)
+                        .put("port", target.port)
+                        .put("intervalMinutes", target.intervalMinutes))
+                }
+            })
             .toString(2)
     }
 
@@ -209,7 +243,22 @@ class ToolkitRepository @Inject constructor(
         }
 
         val favorites = root.optJSONArray("favoriteTargets").strings(MAX_FAVORITES, 256)
-        return ToolkitPersistentState(speed, networks, devices, favorites)
+        val monitors = root.optJSONArray("monitors").objects(MAX_MONITORS).mapNotNull { item ->
+            val id = item.optString("id").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val label = item.optString("label").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val host = item.optString("host").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val port = item.optInt("port")
+            val interval = item.optLong("intervalMinutes")
+            if (port !in 1..65535 || interval < 15) return@mapNotNull null
+            HostMonitorTarget(
+                id = clean(id, 64),
+                label = clean(label, 96),
+                host = clean(host, 253),
+                port = port,
+                intervalMinutes = interval,
+            )
+        }
+        return ToolkitPersistentState(speed, networks, devices, favorites, monitors)
     }
 
     private fun serialize(state: ToolkitPersistentState): String = JSONObject()
@@ -246,6 +295,16 @@ class ToolkitRepository @Inject constructor(
             }
         })
         .put("favoriteTargets", JSONArray(state.favoriteTargets))
+        .put("monitors", JSONArray().apply {
+            state.monitors.forEach { target ->
+                put(JSONObject()
+                    .put("id", target.id)
+                    .put("label", target.label)
+                    .put("host", target.host)
+                    .put("port", target.port)
+                    .put("intervalMinutes", target.intervalMinutes))
+            }
+        })
         .toString()
 
     private fun JSONArray?.objects(limit: Int): List<JSONObject> {
@@ -275,6 +334,7 @@ class ToolkitRepository @Inject constructor(
         private const val MAX_MANUAL_NETWORKS = 100
         private const val MAX_MANUAL_DEVICES = 500
         private const val MAX_FAVORITES = 100
+        private const val MAX_MONITORS = 100
         private const val MAX_BACKUP_CHARS = 2 * 1024 * 1024
     }
 }
