@@ -34,11 +34,18 @@ class WifiPermissionPolicyTest {
     @Test
     fun `access point scans require fine location on modern android too`() {
         assertThat(PermissionPolicy.wifiScanPermissionsFor(state(sdkInt = 34)))
-            .containsExactly(NetScopePermissions.ACCESS_FINE_LOCATION)
+            .containsExactly(
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+                NetScopePermissions.ACCESS_FINE_LOCATION,
+            )
+            .inOrder()
 
         val denied = state(
             sdkInt = 34,
-            granted = setOf(NetScopePermissions.NEARBY_WIFI_DEVICES),
+            granted = setOf(
+                NetScopePermissions.NEARBY_WIFI_DEVICES,
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+            ),
         )
         val verdict = PermissionPolicy.verdict(CapabilityArea.ACCESS_POINT_SCAN, denied)
         assertThat(verdict).isInstanceOf(CapabilityVerdict.PermissionRequired::class.java)
@@ -50,7 +57,10 @@ class WifiPermissionPolicyTest {
     fun `fine location unlocks nearby access point scan`() {
         val granted = state(
             sdkInt = 34,
-            granted = setOf(NetScopePermissions.ACCESS_FINE_LOCATION),
+            granted = setOf(
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+                NetScopePermissions.ACCESS_FINE_LOCATION,
+            ),
         )
         assertThat(PermissionPolicy.canScanAccessPoints(granted)).isTrue()
     }
@@ -59,7 +69,10 @@ class WifiPermissionPolicyTest {
     fun `location services gate access point scans`() {
         val state = state(
             sdkInt = 34,
-            granted = setOf(NetScopePermissions.ACCESS_FINE_LOCATION),
+            granted = setOf(
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+                NetScopePermissions.ACCESS_FINE_LOCATION,
+            ),
             locationServicesEnabled = false,
         )
         assertThat(PermissionPolicy.verdict(CapabilityArea.ACCESS_POINT_SCAN, state))
