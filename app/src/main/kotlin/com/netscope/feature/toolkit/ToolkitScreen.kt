@@ -90,6 +90,7 @@ fun ToolkitScreen(
                     ToolkitSection.LEGACY -> LegacySection(state, viewModel)
                     ToolkitSection.CELLULAR -> CellularSection(state, viewModel)
                     ToolkitSection.MONITOR -> MonitorSection(state, viewModel)
+                    ToolkitSection.SSH -> SshSection(state, viewModel)
                     ToolkitSection.INVENTORY -> InventorySection(state, viewModel)
                 }
             }
@@ -544,6 +545,106 @@ private fun MonitorSection(state: ToolkitUiState, viewModel: ToolkitViewModel) {
                         }
                         TextButton(onClick = { viewModel.removeMonitor(target.id) }) {
                             Text("Stop")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SshSection(state: ToolkitUiState, viewModel: ToolkitViewModel) {
+    SectionCard(
+        title = "Read-only SSH system monitor",
+        subtitle = "OS, uptime, load, RAM and disk without arbitrary shell commands",
+    ) {
+        Column {
+            NoticeBanner(
+                text = "Step 1 fetches the SSH host key without sending your password. Verify the " +
+                    "SHA-256 fingerprint against the server, then use Trust & read snapshot. " +
+                    "Credentials stay only in memory and the password is cleared after the run.",
+                tone = NoticeTone.INFO,
+            )
+            OutlinedTextField(
+                value = state.sshHost,
+                onValueChange = viewModel::setSshHost,
+                label = { Text("SSH host") },
+                singleLine = true,
+                textStyle = MonoTextStyle,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = state.sshPort,
+                    onValueChange = viewModel::setSshPort,
+                    label = { Text("Port") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = state.sshUsername,
+                    onValueChange = viewModel::setSshUsername,
+                    label = { Text("Username") },
+                    singleLine = true,
+                    modifier = Modifier.weight(2f),
+                )
+            }
+            OutlinedTextField(
+                value = state.sshPassword,
+                onValueChange = viewModel::setSshPassword,
+                label = { Text("Password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedButton(
+                    onClick = viewModel::scanSshHostKey,
+                    enabled = !state.busy,
+                ) { Text("1. Fetch host key") }
+                Button(
+                    onClick = viewModel::runSshSnapshot,
+                    enabled = !state.busy && state.sshHostKey != null,
+                ) { Text("2. Trust & read snapshot") }
+                if (state.busy) TextButton(onClick = viewModel::cancel) { Text("Stop") }
+            }
+
+            state.sshHostKey?.let { key ->
+                Column(modifier = Modifier.padding(top = 10.dp)) {
+                    Text("Server host key", style = MaterialTheme.typography.titleSmall)
+                    PlainRow("Algorithm", key.algorithm)
+                    PlainRow("Fingerprint", key.sha256Fingerprint, monospace = true, copyable = true)
+                    Text(
+                        "Do not continue if this fingerprint does not match the server you intended to reach.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            state.sshSnapshot?.let { snapshot ->
+                Column(modifier = Modifier.padding(top = 10.dp)) {
+                    Text("Remote system snapshot", style = MaterialTheme.typography.titleSmall)
+                    PlainRow("OS", snapshot.operatingSystem ?: "NOT DISCOVERED")
+                    PlainRow("Uptime", snapshot.uptime ?: "NOT DISCOVERED")
+                    PlainRow("Load", snapshot.loadAverage ?: "NOT DISCOVERED")
+                    PlainRow("Memory", snapshot.memory ?: "NOT DISCOVERED")
+                    if (snapshot.disks.isNotEmpty()) {
+                        Text(
+                            "Disk / filesystem",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
+                        snapshot.disks.forEach { line ->
+                            Text(line, style = MonoSmallTextStyle)
                         }
                     }
                 }
