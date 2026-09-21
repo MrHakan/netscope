@@ -34,6 +34,7 @@ object NetScopePermissions {
     const val ACCESS_WIFI_STATE = "android.permission.ACCESS_WIFI_STATE"
     const val CHANGE_WIFI_STATE = "android.permission.CHANGE_WIFI_STATE"
     const val NEARBY_WIFI_DEVICES = "android.permission.NEARBY_WIFI_DEVICES"
+    const val ACCESS_COARSE_LOCATION = "android.permission.ACCESS_COARSE_LOCATION"
     const val ACCESS_FINE_LOCATION = "android.permission.ACCESS_FINE_LOCATION"
     const val POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS"
 
@@ -174,7 +175,14 @@ object PermissionPolicy {
      * the app targets API 33+, so this gate is intentionally separate from WIFI_INFO.
      */
     fun wifiScanPermissionsFor(state: PlatformState): List<String> =
-        listOf(NetScopePermissions.ACCESS_FINE_LOCATION)
+        if (state.sdkInt >= 31) {
+            listOf(
+                NetScopePermissions.ACCESS_COARSE_LOCATION,
+                NetScopePermissions.ACCESS_FINE_LOCATION,
+            )
+        } else {
+            listOf(NetScopePermissions.ACCESS_FINE_LOCATION)
+        }
 
     /**
      * The local network permission name this platform uses, or null if it has none.
