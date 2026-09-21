@@ -89,6 +89,7 @@ fun ToolkitScreen(
                     ToolkitSection.DISCOVERY -> DiscoverySection(state, viewModel)
                     ToolkitSection.LEGACY -> LegacySection(state, viewModel)
                     ToolkitSection.CELLULAR -> CellularSection(state, viewModel)
+                    ToolkitSection.MONITOR -> MonitorSection(state, viewModel)
                     ToolkitSection.INVENTORY -> InventorySection(state, viewModel)
                 }
             }
@@ -463,6 +464,87 @@ private fun CellularSection(state: ToolkitUiState, viewModel: ToolkitViewModel) 
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 8.dp),
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonitorSection(state: ToolkitUiState, viewModel: ToolkitViewModel) {
+    SectionCard(
+        title = "Host monitor",
+        subtitle = "Periodic TCP reachability with state-change alerts",
+    ) {
+        Column {
+            NoticeBanner(
+                "Android WorkManager has a 15-minute minimum periodic interval and is inexact. " +
+                    "A refused TCP connection still proves the host responded; NetScope keeps it " +
+                    "separate from an open port.",
+                NoticeTone.INFO,
+            )
+            OutlinedTextField(
+                value = state.monitorLabel,
+                onValueChange = viewModel::setMonitorLabel,
+                label = { Text("Label (optional)") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            )
+            OutlinedTextField(
+                value = state.monitorHost,
+                onValueChange = viewModel::setMonitorHost,
+                label = { Text("Host or IP") },
+                singleLine = true,
+                textStyle = MonoTextStyle,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = state.monitorPort,
+                    onValueChange = viewModel::setMonitorPort,
+                    label = { Text("TCP port") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = state.monitorIntervalMinutes,
+                    onValueChange = viewModel::setMonitorInterval,
+                    label = { Text("Minutes") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Button(
+                onClick = viewModel::addMonitor,
+                modifier = Modifier.padding(top = 8.dp),
+            ) { Text("Start monitoring") }
+
+            if (state.persistent.monitors.isNotEmpty()) {
+                Text(
+                    "Scheduled monitors",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                state.persistent.monitors.forEach { target ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(target.label, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                target.host + ":" + target.port + " · about every " +
+                                    target.intervalMinutes + " min",
+                                style = MonoSmallTextStyle,
+                            )
+                        }
+                        TextButton(onClick = { viewModel.removeMonitor(target.id) }) {
+                            Text("Stop")
+                        }
                     }
                 }
             }
