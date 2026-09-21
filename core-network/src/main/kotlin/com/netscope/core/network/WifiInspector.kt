@@ -168,7 +168,7 @@ class WifiInspector @Inject constructor(
             },
             securityCapabilities = result.capabilities ?: "",
             securityTypes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                result.securityTypes.mapNotNull(::securityTypeLabel).distinct()
+                result.securityTypes.map { securityTypeLabel(it) }.filterNotNull().distinct()
             } else {
                 emptyList()
             },
