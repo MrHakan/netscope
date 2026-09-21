@@ -177,7 +177,10 @@ class LocalNetworkPermissionPolicyTest {
         val blocked = state(
             sdkInt = 37,
             targetSdkInt = 37,
-            granted = setOf(NetScopePermissions.NEARBY_WIFI_DEVICES),
+            granted = setOf(
+                NetScopePermissions.NEARBY_WIFI_DEVICES,
+                NetScopePermissions.ACCESS_FINE_LOCATION,
+            ),
             platformDefined = definesPermission,
             declared = definesPermission,
         )
