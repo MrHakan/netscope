@@ -83,6 +83,7 @@ data class ToolsUiState(
     val dnsRecordType: DnsRecordType = DnsRecordType.A,
     val dnsResult: DnsLookupResult? = null,
     val dnsSupportsAllTypes: Boolean = true,
+    val dnsRecursionDesired: Boolean = true,
 
     val portHost: String = "",
     val portProfile: PortScanner.Profile = PortScanner.Profile.QUICK,
@@ -297,6 +298,7 @@ class ToolsViewModel @Inject constructor(
 
     fun setDnsQuery(value: String) { _state.value = _state.value.copy(dnsQuery = value) }
     fun setDnsRecordType(type: DnsRecordType) { _state.value = _state.value.copy(dnsRecordType = type) }
+    fun setDnsRecursionDesired(value: Boolean) { _state.value = _state.value.copy(dnsRecursionDesired = value) }
 
     fun runDnsLookup() {
         val query = _state.value.dnsQuery.trim()
@@ -322,11 +324,11 @@ class ToolsViewModel @Inject constructor(
                         )
                         return@launch
                     }
-                    dnsTools.query(pointerName, DnsRecordType.PTR)
+                    dnsTools.query(pointerName, DnsRecordType.PTR, recursionDesired = _state.value.dnsRecursionDesired)
                 } else if (type == DnsRecordType.A || type == DnsRecordType.AAAA) {
                     dnsTools.resolve(query)
                 } else {
-                    dnsTools.query(query, type)
+                    dnsTools.query(query, type, recursionDesired = _state.value.dnsRecursionDesired)
                 }
                 _state.value = _state.value.copy(busy = false, dnsResult = result)
             } catch (e: kotlinx.coroutines.CancellationException) {
